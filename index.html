@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TRIMBLE | Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="brand-panel" aria-label="Informações da Trimble Connect">
+        <p class="tag">TRIMBLE CONNECT</p>
+        <h1>Acesse seus projetos em um só lugar</h1>
+        <p class="description">
+          Faça login para visualizar modelos, colaborar com a equipe e acompanhar o
+          andamento das obras no Trimble Connect.
+        </p>
+      </section>
+
+      <section class="form-panel" aria-label="Formulário de login">
+        <div class="card">
+          <h2>Entrar</h2>
+          <p class="subtitle">Use suas credenciais Trimble ID.</p>
+
+          <form id="loginForm" class="login-form" novalidate>
+            <label for="email">E-mail corporativo</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              placeholder="nome@empresa.com"
+              required
+            />
+
+            <label for="password">Senha</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="••••••••"
+              minlength="8"
+              required
+            />
+
+            <button type="submit">Entrar no Trimble Connect</button>
+            <p id="statusMessage" class="status-message" role="status" aria-live="polite"></p>
+          </form>
+
+          <a class="support-link" href="#" aria-label="Ajuda para acesso">
+            Esqueceu sua senha?
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
