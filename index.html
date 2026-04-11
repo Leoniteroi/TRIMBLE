@@ -3,64 +3,111 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TRIMBLE | Login</title>
+    <title>Trimble Connect | Extensao de Projetos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="login-page">
-      <section class="brand-panel" aria-label="Informações da Trimble Connect">
-        <p class="tag">TRIMBLE CONNECT</p>
-        <h1>Acesse seus projetos em um só lugar</h1>
-        <p class="description">
-          Faça login para visualizar modelos, colaborar com a equipe e acompanhar o
-          andamento das obras no Trimble Connect.
+    <main class="app-shell">
+      <section class="hero-panel" aria-label="Resumo da extensao">
+        <p class="eyebrow">TRIMBLE CONNECT EXTENSION</p>
+        <h1>Projetos e sessao do usuario dentro do proprio Connect</h1>
+        <p class="hero-copy">
+          Esta extensao usa o Workspace API para reaproveitar a sessao ja aberta no
+          Trimble Connect. Nao existe formulario de login local: o token vem do
+          consentimento do usuario dentro da plataforma.
         </p>
+
+        <div class="status-stack">
+          <div class="status-chip">
+            <span class="status-label">Conexao</span>
+            <strong id="connectionState">Aguardando</strong>
+          </div>
+          <div class="status-chip">
+            <span class="status-label">Token</span>
+            <strong id="tokenState">Nao solicitado</strong>
+          </div>
+        </div>
+
+        <div class="project-spotlight">
+          <p class="section-label">Projeto atual</p>
+          <h2 id="currentProjectName">Nenhum projeto carregado</h2>
+          <p id="currentProjectMeta" class="muted">
+            Abra a extensao a partir de um projeto no Trimble Connect.
+          </p>
+        </div>
       </section>
 
-      <section class="form-panel" aria-label="Formulário de login">
-        <div class="card">
-          <h2>Entrar</h2>
-          <p class="subtitle">Use suas credenciais Trimble ID.</p>
+      <section class="workspace-panel" aria-label="Dados da extensao">
+        <div class="panel-card">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Workspace API</p>
+              <h2>Extensao conectada ao projeto</h2>
+            </div>
+            <button id="refreshButton" type="button">Atualizar dados</button>
+          </div>
 
-          <form id="loginForm" class="login-form" novalidate>
-            <label for="email">E-mail corporativo</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autocomplete="email"
-              placeholder="nome@empresa.com"
-              required
-            />
+          <p id="statusMessage" class="status-message" role="status" aria-live="polite">
+            Inicializando extensao...
+          </p>
 
-            <label for="password">Senha</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="••••••••"
-              minlength="8"
-              required
-            />
+          <div class="grid">
+            <article class="info-card">
+              <p class="section-label">Usuario</p>
+              <h3 id="userName">Nao identificado</h3>
+              <p id="userEmail" class="muted">Aguardando permissao do token</p>
+            </article>
 
-            <button type="submit">Entrar no Trimble Connect</button>
-            <p id="statusMessage" class="status-message" role="status" aria-live="polite"></p>
-          </form>
+            <article class="info-card">
+              <p class="section-label">Permissoes</p>
+              <h3 id="permissionState">Pendente</h3>
+              <p class="muted">
+                A extensao solicita o `accesstoken` diretamente ao Trimble Connect.
+              </p>
+            </article>
+          </div>
+        </div>
 
-          <a class="support-link" href="#" aria-label="Ajuda para acesso">
-            Esqueceu sua senha?
-          </a>
+        <div class="panel-card">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Projetos do usuario</p>
+              <h2>Lista carregada via REST API</h2>
+            </div>
+            <span id="projectCount" class="pill">0 projetos</span>
+          </div>
+
+          <div id="projectList" class="project-list" aria-live="polite"></div>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Topicos do projeto</p>
+              <h2>Listagem ao clicar em um projeto</h2>
+            </div>
+            <span id="topicCount" class="pill">0 topicos</span>
+          </div>
+
+          <div id="topicList" class="topic-list" aria-live="polite">
+            <p class="empty-state">Selecione um projeto para carregar os topicos.</p>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <p class="section-label">JSON selecionado</p>
+          <pre id="rawOutput" class="raw-output">Sem dados ainda.</pre>
         </div>
       </section>
     </main>
 
+    <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

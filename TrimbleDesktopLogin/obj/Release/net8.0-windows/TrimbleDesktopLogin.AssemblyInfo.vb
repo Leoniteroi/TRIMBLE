@@ -14,7 +14,7 @@ Option Explicit On
 Imports System
 Imports System.Reflection
 <Assembly: System.Reflection.AssemblyCompanyAttribute("TrimbleDesktopLogin"),  _
- Assembly: System.Reflection.AssemblyConfigurationAttribute("Debug"),  _
+ Assembly: System.Reflection.AssemblyConfigurationAttribute("Release"),  _
  Assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0"),  _
  Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+40c0b04bceac420dc976489fdcf8d5f3e53e3d15"),  _
  Assembly: System.Reflection.AssemblyProductAttribute("TrimbleDesktopLogin"),  _
