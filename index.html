@@ -10,44 +10,44 @@
   <body>
     <main class="app-shell">
       <div class="app">
-      <header class="header">
-        <div>
-          <h1>Trimble Topics</h1>
-          <p id="statusMessage">Inicializando...</p>
-        </div>
-        <button id="refreshButton" type="button">Atualizar</button>
-      </header>
-
-      <section class="card">
-        <h2>Projeto atual</h2>
-        <p id="currentProjectName">Nenhum projeto carregado</p>
-        <p id="currentProjectMeta" class="muted">Abra a extensão dentro do Trimble Connect.</p>
-      </section>
-
-      <section class="grid">
-        <section class="card">
-          <div class="section-header">
-            <h2>Projetos</h2>
-            <span id="projectCount">0</span>
+        <header class="header">
+          <div>
+            <h1>Trimble Topics</h1>
+            <p id="statusMessage">Inicializando...</p>
           </div>
-          <div id="projectList" class="list"></div>
+          <button id="refreshButton" type="button">Atualizar</button>
+        </header>
+
+        <section class="card">
+          <h2>Projeto atual</h2>
+          <p id="currentProjectName">Nenhum projeto carregado</p>
+          <p id="currentProjectMeta" class="muted">Abra a extensao dentro do Trimble Connect.</p>
+        </section>
+
+        <section class="grid">
+          <section class="card">
+            <div class="section-header">
+              <h2>Projetos</h2>
+              <span id="projectCount">0</span>
+            </div>
+            <div id="projectList" class="list"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>Topicos</h2>
+              <span id="topicCount">0</span>
+            </div>
+            <div id="topicList" class="list">
+              <p class="empty">Selecione um projeto.</p>
+            </div>
+          </section>
         </section>
 
         <section class="card">
-          <div class="section-header">
-            <h2>Tópicos</h2>
-            <span id="topicCount">0</span>
-          </div>
-          <div id="topicList" class="list">
-            <p class="empty">Selecione um projeto.</p>
-          </div>
+          <h2>JSON</h2>
+          <pre id="rawOutput">Sem dados.</pre>
         </section>
-      </section>
-
-      <section class="card">
-        <h2>JSON</h2>
-        <pre id="rawOutput">Sem dados.</pre>
-      </section>
       </div>
     </main>
 
