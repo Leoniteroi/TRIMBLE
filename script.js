@@ -16,10 +16,9 @@ const topicCount = document.getElementById("topicCount");
 let workspaceApi = null;
 let accessToken = "";
 let selectedProjectId = "";
+let currentProjectId = "";
 
 const topicEndpointCandidates = [
-  (projectId) => `https://web.connect.trimble.com/bcf/3.0/projects/${encodeURIComponent(projectId)}/topics`,
-  (projectId) => `https://web.connect.trimble.com/bcf/2.1/projects/${encodeURIComponent(projectId)}/topics`,
   (projectId) => `https://app.connect.trimble.com/bcf/3.0/projects/${encodeURIComponent(projectId)}/topics`,
   (projectId) => `https://app.connect.trimble.com/bcf/2.1/projects/${encodeURIComponent(projectId)}/topics`,
 ];
@@ -224,15 +223,18 @@ async function loadCurrentProject() {
       currentProjectName.textContent = "Projeto nao encontrado";
       currentProjectMeta.textContent =
         "A extensao precisa ser aberta dentro do contexto de um projeto.";
+      currentProjectId = "";
       return;
     }
 
+    currentProjectId = project.id || project.projectId || "";
     currentProjectName.textContent =
       project.name || project.projectName || "Projeto atual";
     currentProjectMeta.textContent = [project.id, project.number]
       .filter(Boolean)
       .join(" | ");
   } catch (error) {
+    currentProjectId = "";
     currentProjectName.textContent = "Falha ao ler o projeto atual";
     currentProjectMeta.textContent = error.message;
   }
@@ -256,10 +258,16 @@ async function loadUserAndProjects() {
     userPayload.email || userPayload.mail || "E-mail nao informado";
 
   const projects = normalizeProjects(projectsPayload);
+  const resolvedProjectId =
+    currentProjectId && projects.some((project) => project.id === currentProjectId)
+      ? currentProjectId
+      : selectedProjectId || projects[0]?.id || "";
+
+  selectedProjectId = resolvedProjectId;
   renderProjectList(projects);
 
-  if (projects.length) {
-    await loadTopicsForProject(selectedProjectId || projects[0].id);
+  if (resolvedProjectId) {
+    await loadTopicsForProject(resolvedProjectId);
   } else {
     setTopicLoading("Nenhum projeto disponivel para carregar topicos.");
   }
