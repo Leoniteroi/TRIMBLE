@@ -20,11 +20,16 @@ let currentProjectId = "";
 
 function buildBcfTopicEndpointCandidates(projectId) {
   const encodedProjectId = encodeURIComponent(projectId);
+  const pathV30 = `/bcf/3.0/projects/${encodedProjectId}/topics`;
+  const pathV21 = `/bcf/2.1/projects/${encodedProjectId}/topics`;
+  const hosts = ["https://web.connect.trimble.com", "https://app.connect.trimble.com"];
 
-  return [
-    `https://web.connect.trimble.com/bcf/2.1/projects/${encodedProjectId}/topics`,
-    `https://app.connect.trimble.com/bcf/2.1/projects/${encodedProjectId}/topics`,
-  ];
+  return hosts.flatMap((host) => [
+    { version: "3.0", url: `${host}${pathV30}` },
+    { version: "3.0", url: `${host}${pathV30}?includeAuthorization=true` },
+    { version: "2.1", url: `${host}${pathV21}` },
+    { version: "2.1", url: `${host}${pathV21}?includeAuthorization=true` },
+  ]);
 }
 
 function showStatus(message, type = "info") {
@@ -176,20 +181,31 @@ async function fetchJson(url, token, extraHeaders = {}) {
 }
 
 async function fetchBcfTopics(projectId, token) {
-  let lastError = null;
+  const errors = [];
   const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
-  for (const url of endpointCandidates) {
+  for (const endpoint of endpointCandidates) {
     try {
-      return await fetchJson(url, token, {
+      const payload = await fetchJson(endpoint.url, token, {
         "Content-Type": "application/json",
       });
+      return {
+        payload,
+        endpoint,
+      };
     } catch (error) {
-      lastError = error;
+      errors.push({
+        url: endpoint.url,
+        version: endpoint.version,
+        message: error.message,
+      });
     }
   }
 
-  throw lastError || new Error("Nenhum endpoint BCF 2.1 de topicos respondeu com sucesso.");
+  const message = errors
+    .map((error) => `[BCF ${error.version}] ${error.url} -> ${error.message}`)
+    .join(" || ");
+  throw new Error(`Nenhum endpoint BCF retornou topicos. Tentativas: ${message}`);
 }
 
 async function loadTopicsForProject(project) {
@@ -207,7 +223,8 @@ async function loadTopicsForProject(project) {
 
   setTopicLoading("Carregando topicos do projeto selecionado...");
   try {
-    const topicsPayload = await fetchBcfTopics(projectId, accessToken);
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken);
+    const topicsPayload = topicsResponse.payload;
     const topics = normalizeTopics(topicsPayload);
 
     renderTopicList(topics);
@@ -215,6 +232,7 @@ async function loadTopicsForProject(project) {
       {
         projectId,
         projectRaw,
+        bcfEndpoint: topicsResponse.endpoint,
         topics,
         raw: topicsPayload,
       },
