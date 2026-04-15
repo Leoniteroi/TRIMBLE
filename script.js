@@ -18,14 +18,11 @@ let accessToken = "";
 let selectedProjectId = "";
 let currentProjectId = "";
 
-function buildTopicEndpointCandidates(projectId, location) {
+function buildBcfTopicEndpointCandidates(projectId) {
   const encodedProjectId = encodeURIComponent(projectId);
-  const query = location ? `?location=${encodeURIComponent(location)}` : "";
 
   return [
-    `https://web.connect.trimble.com/api/projects/${encodedProjectId}/topics${query}`,
-    `https://app.connect.trimble.com/api/projects/${encodedProjectId}/topics${query}`,
-    `https://app.connect.trimble.com/bcf/3.0/projects/${encodedProjectId}/topics`,
+    `https://web.connect.trimble.com/bcf/2.1/projects/${encodedProjectId}/topics`,
     `https://app.connect.trimble.com/bcf/2.1/projects/${encodedProjectId}/topics`,
   ];
 }
@@ -161,11 +158,12 @@ function normalizeTopics(payload) {
   }));
 }
 
-async function fetchJson(url, token) {
+async function fetchJson(url, token, extraHeaders = {}) {
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
+      ...extraHeaders,
     },
   });
 
@@ -177,25 +175,26 @@ async function fetchJson(url, token) {
   return response.json();
 }
 
-async function fetchTopics(projectId, token, projectLocation) {
+async function fetchBcfTopics(projectId, token) {
   let lastError = null;
-  const endpointCandidates = buildTopicEndpointCandidates(projectId, projectLocation);
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
   for (const url of endpointCandidates) {
     try {
-      return await fetchJson(url, token);
+      return await fetchJson(url, token, {
+        "Content-Type": "application/json",
+      });
     } catch (error) {
       lastError = error;
     }
   }
 
-  throw lastError || new Error("Nenhum endpoint de topicos respondeu com sucesso.");
+  throw lastError || new Error("Nenhum endpoint BCF 2.1 de topicos respondeu com sucesso.");
 }
 
 async function loadTopicsForProject(project) {
   const projectId = typeof project === "string" ? project : project?.id || project?.projectId || "";
   const projectRaw = typeof project === "string" ? null : project?.raw || project;
-  const projectLocation = projectRaw?.location || "";
 
   if (!projectId) {
     setTopicLoading("O projeto selecionado nao possui identificador valido.");
@@ -208,7 +207,7 @@ async function loadTopicsForProject(project) {
 
   setTopicLoading("Carregando topicos do projeto selecionado...");
   try {
-    const topicsPayload = await fetchTopics(projectId, accessToken, projectLocation);
+    const topicsPayload = await fetchBcfTopics(projectId, accessToken);
     const topics = normalizeTopics(topicsPayload);
 
     renderTopicList(topics);
