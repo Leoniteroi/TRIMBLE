@@ -16,11 +16,44 @@ const topicCount = document.getElementById("topicCount");
 let workspaceApi = null;
 let accessToken = "";
 let selectedProjectId = "";
+let currentProjectId = "";
 
-const topicEndpointCandidates = [
-  (projectId) => `https://app.connect.trimble.com/bcf/3.0/projects/${projectId}/topics`,
-  (projectId) => `https://app.connect.trimble.com/bcf/2.1/projects/${projectId}/topics`,
-];
+const TOPICS_REGION_HOSTS = {
+  northamerica: "https://open11.connect.trimble.com",
+  europe: "https://open21.connect.trimble.com",
+  asiapacific: "https://open31.connect.trimble.com",
+  australia: "https://open32.connect.trimble.com",
+};
+
+function buildBcfTopicEndpointCandidates(projectId) {
+  const encodedProjectId = encodeURIComponent(projectId);
+  const bcf3Path = `/bcf/3.0/projects/${encodedProjectId}/topics`;
+  const bcf21Path = `/bcf/2.1/projects/${encodedProjectId}/topics?top=500`;
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  return allHosts.flatMap((host) => [
+    { version: "3.0", url: `${host}${bcf3Path}` },
+    { version: "2.1", url: `${host}${bcf21Path}` },
+  ]);
+}
+
+function normalizeProjectLocation(location) {
+  return String(location || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
+function prioritizeTopicHostsByProject(projectRaw) {
+  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
+  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  if (!prioritizedHost) {
+    return allHosts;
+  }
+
+  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
+}
 
 function showStatus(message, type = "info") {
   statusMessage.textContent = message;
@@ -115,7 +148,7 @@ function renderProjectList(projects) {
       });
 
       try {
-        await loadTopicsForProject(project.id);
+        await loadTopicsForProject(project);
       } catch (error) {
         showStatus(`Nao foi possivel carregar os topicos do projeto: ${error.message}`, "error");
       }
@@ -153,11 +186,12 @@ function normalizeTopics(payload) {
   }));
 }
 
-async function fetchJson(url, token) {
+async function fetchJson(url, token, extraHeaders = {}) {
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
+      ...extraHeaders,
     },
   });
 
@@ -169,23 +203,41 @@ async function fetchJson(url, token) {
   return response.json();
 }
 
-async function fetchTopics(projectId, token) {
-  let lastError = null;
+async function fetchBcfTopics(projectId, token, projectRaw) {
+  const errors = [];
+  const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId).sort((a, b) => {
+    const hostA = orderedHosts.indexOf(new URL(a.url).origin);
+    const hostB = orderedHosts.indexOf(new URL(b.url).origin);
+    return hostA - hostB;
+  });
 
-  for (const buildUrl of topicEndpointCandidates) {
-    const url = buildUrl(projectId);
-
+  for (const endpoint of endpointCandidates) {
     try {
-      return await fetchJson(url, token);
+      const payload = await fetchJson(endpoint.url, token);
+      return {
+        payload,
+        endpoint,
+      };
     } catch (error) {
-      lastError = error;
+      errors.push({
+        url: endpoint.url,
+        version: endpoint.version,
+        message: error.message,
+      });
     }
   }
 
-  throw lastError || new Error("Nenhum endpoint de topicos respondeu com sucesso.");
+  const message = errors
+    .map((error) => `[BCF ${error.version}] ${error.url} -> ${error.message}`)
+    .join(" || ");
+  throw new Error(`Nenhum endpoint BCF retornou topicos. Tentativas: ${message}`);
 }
 
-async function loadTopicsForProject(projectId) {
+async function loadTopicsForProject(project) {
+  const projectId = typeof project === "string" ? project : project?.id || project?.projectId || "";
+  const projectRaw = typeof project === "string" ? null : project?.raw || project;
+
   if (!projectId) {
     setTopicLoading("O projeto selecionado nao possui identificador valido.");
     return;
@@ -196,20 +248,36 @@ async function loadTopicsForProject(projectId) {
   }
 
   setTopicLoading("Carregando topicos do projeto selecionado...");
+  try {
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+    const topicsPayload = topicsResponse.payload;
+    const topics = normalizeTopics(topicsPayload);
 
-  const topicsPayload = await fetchTopics(projectId, accessToken);
-  const topics = normalizeTopics(topicsPayload);
-
-  renderTopicList(topics);
-  rawOutput.textContent = JSON.stringify(
-    {
-      projectId,
-      topics,
-      raw: topicsPayload,
-    },
-    null,
-    2
-  );
+    renderTopicList(topics);
+    rawOutput.textContent = JSON.stringify(
+      {
+        projectId,
+        projectRaw,
+        bcfEndpoint: topicsResponse.endpoint,
+        topics,
+        raw: topicsPayload,
+      },
+      null,
+      2
+    );
+  } catch (error) {
+    renderTopicList([]);
+    rawOutput.textContent = JSON.stringify(
+      {
+        projectId,
+        projectRaw,
+        error: error.message,
+      },
+      null,
+      2
+    );
+    throw error;
+  }
 }
 
 async function loadCurrentProject() {
@@ -222,15 +290,18 @@ async function loadCurrentProject() {
       currentProjectName.textContent = "Projeto nao encontrado";
       currentProjectMeta.textContent =
         "A extensao precisa ser aberta dentro do contexto de um projeto.";
+      currentProjectId = "";
       return;
     }
 
+    currentProjectId = project.id || project.projectId || "";
     currentProjectName.textContent =
       project.name || project.projectName || "Projeto atual";
     currentProjectMeta.textContent = [project.id, project.number]
       .filter(Boolean)
       .join(" | ");
   } catch (error) {
+    currentProjectId = "";
     currentProjectName.textContent = "Falha ao ler o projeto atual";
     currentProjectMeta.textContent = error.message;
   }
@@ -254,10 +325,18 @@ async function loadUserAndProjects() {
     userPayload.email || userPayload.mail || "E-mail nao informado";
 
   const projects = normalizeProjects(projectsPayload);
+  const resolvedProjectId =
+    currentProjectId && projects.some((project) => project.id === currentProjectId)
+      ? currentProjectId
+      : selectedProjectId || projects[0]?.id || "";
+
+  selectedProjectId = resolvedProjectId;
   renderProjectList(projects);
 
-  if (projects.length) {
-    await loadTopicsForProject(selectedProjectId || projects[0].id);
+  if (resolvedProjectId) {
+    const selectedProject =
+      projects.find((project) => project.id === resolvedProjectId) || { id: resolvedProjectId };
+    await loadTopicsForProject(selectedProject);
   } else {
     setTopicLoading("Nenhum projeto disponivel para carregar topicos.");
   }
