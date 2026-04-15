@@ -11,30 +11,9 @@ const rawOutput = document.getElementById("rawOutput");
 let workspaceApi;
 let accessToken = "";
 let selectedProjectId = "";
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
 let projects = [];
 
 function setStatus(message) {
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 let currentProjectId = "";
 
 function buildBcfTopicEndpointCandidates(projectId) {
@@ -49,19 +28,6 @@ function buildBcfTopicEndpointCandidates(projectId) {
     { version: "2.1", url: `${host}${pathV21}` },
     { version: "2.1", url: `${host}${pathV21}?includeAuthorization=true` },
   ];
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 let currentProjectId = "";
 
 const TOPICS_REGION_HOSTS = {
@@ -81,23 +47,6 @@ function buildBcfTopicEndpointCandidates(projectId) {
     { version: "3.0", url: `${host}${bcf3Path}` },
     { version: "2.1", url: `${host}${bcf21Path}` },
   ]);
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 }
 
 function normalizeProjectLocation(location) {
@@ -105,64 +54,25 @@ function normalizeProjectLocation(location) {
     .toLowerCase()
     .replace(/[^a-z]/g, "");
 }
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-=======
->>>>>>> theirs
-
-function prioritizeTopicHostsByProject(projectRaw) {
-  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
-  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-<<<<<<< ours
-<<<<<<< ours
-
-  if (!prioritizedHost) {
-    return allHosts;
-  }
-
-=======
-
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 
 function prioritizeTopicHostsByProject(projectRaw) {
   const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
   const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
   const allHosts = Object.values(TOPICS_REGION_HOSTS);
 
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
-
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
   if (!prioritizedHost) {
     return allHosts;
   }
 
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
+function prioritizeTopicHostsByProject(projectRaw) {
+  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
+  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  if (!prioritizedHost) {
+    return allHosts;
+  }
+
   return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
 }
 
@@ -188,11 +98,9 @@ function prioritizeTopicHostsByProject(projectRaw) {
   }
 
   return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
->>>>>>> theirs
 }
 
 function showStatus(message, type = "info") {
->>>>>>> theirs
   statusMessage.textContent = message;
 }
 
@@ -276,65 +184,17 @@ function renderProjects() {
       document.querySelectorAll("#projectList .item").forEach((item) => {
         item.classList.toggle("active", item === button);
       });
-<<<<<<< ours
       setJson(project.raw);
       await loadTopics(project);
-=======
-
-      try {
-        await loadTopicsForProject(project);
-      } catch (error) {
-        showStatus(`Nao foi possivel carregar os topicos do projeto: ${error.message}`, "error");
-      }
->>>>>>> theirs
     });
 
     projectList.appendChild(button);
   });
 }
 
-<<<<<<< ours
 function renderTopics(items) {
   topicList.innerHTML = "";
   topicCount.textContent = String(items.length);
-=======
-function normalizeProjects(payload) {
-  const candidates = Array.isArray(payload)
-    ? payload
-    : payload?.data || payload?.items || payload?.projects || payload?.results || [];
-
-  return candidates.map((project) => ({
-    id: project.id || project.projectId || project.identifier || "",
-    name: project.name || project.projectName || "Projeto sem nome",
-    number: project.number || project.projectNumber || project.externalId || "",
-    raw: project,
-  }));
-}
-
-function normalizeTopics(payload) {
-  const candidates = Array.isArray(payload)
-    ? payload
-    : payload?.data || payload?.items || payload?.topics || payload?.results || [];
-
-  return candidates.map((topic) => ({
-    id: topic.topic_id || topic.id || topic.guid || "",
-    guid: topic.guid || topic.topic_id || topic.id || "",
-    title: topic.title || topic.topic_title || topic.description || "",
-    status: topic.topic_status || topic.status || "",
-    type: topic.topic_type || topic.type || "",
-    raw: topic,
-  }));
-}
-
-async function fetchJson(url, token, extraHeaders = {}) {
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      ...extraHeaders,
-    },
-  });
->>>>>>> theirs
 
   if (!items.length) {
     topicList.innerHTML = '<p class="empty">Nenhum topico encontrado.</p>';
@@ -344,18 +204,10 @@ async function fetchJson(url, token, extraHeaders = {}) {
   items.forEach((topic) => {
     const article = document.createElement("article");
     article.className = "item";
-
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
     const title = document.createElement("span");
     title.className = "title";
     title.textContent = topic.title;
 
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
     const meta = document.createElement("span");
     meta.className = "meta";
     meta.textContent = topic.meta;
@@ -365,40 +217,28 @@ async function fetchJson(url, token, extraHeaders = {}) {
   });
 }
 
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
 async function loadTopics(project) {
   if (!project?.id || !accessToken) {
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
+
 async function fetchBcfTopics(projectId, token) {
   const errors = [];
   const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
-=======
+
 async function fetchBcfTopics(projectId, token) {
   const errors = [];
   const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
->>>>>>> theirs
-=======
 async function fetchBcfTopics(projectId, token) {
   const errors = [];
   const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
->>>>>>> theirs
   for (const endpoint of endpointCandidates) {
     try {
       const payload = await fetchJson(endpoint.url, token, {
         "Content-Type": "application/json",
       });
-=======
+
 async function fetchBcfTopics(projectId, token, projectRaw) {
   const errors = [];
   const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
@@ -411,18 +251,7 @@ async function fetchBcfTopics(projectId, token, projectRaw) {
   for (const endpoint of endpointCandidates) {
     try {
       const payload = await fetchJson(endpoint.url, token);
->>>>>>> theirs
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
+
 async function fetchBcfTopics(projectId, token, projectRaw) {
   const errors = [];
   const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
@@ -435,22 +264,7 @@ async function fetchBcfTopics(projectId, token, projectRaw) {
   for (const endpoint of endpointCandidates) {
     try {
       const payload = await fetchJson(endpoint.url, token);
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
+
       return {
         payload,
         endpoint,
@@ -476,14 +290,14 @@ async function loadTopicsForProject(project) {
 
   if (!projectId) {
     setTopicLoading("O projeto selecionado nao possui identificador valido.");
->>>>>>> theirs
+
     return;
   }
 
   setStatus("Carregando topicos...");
   topicList.innerHTML = '<p class="empty">Carregando...</p>';
 
-<<<<<<< ours
+
   try {
     const payload = await fetchJson(
       `/api/projects/${encodeURIComponent(project.id)}/topics?location=${encodeURIComponent(project.location)}`,
@@ -501,35 +315,23 @@ async function loadTopicsForProject(project) {
 =======
   setTopicLoading("Carregando topicos do projeto selecionado...");
   try {
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken);
-=======
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
->>>>>>> theirs
-=======
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
->>>>>>> theirs
-=======
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
->>>>>>> theirs
-=======
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
->>>>>>> theirs
-=======
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
->>>>>>> theirs
-=======
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
->>>>>>> theirs
-=======
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
->>>>>>> theirs
+
     const topicsPayload = topicsResponse.payload;
     const topics = normalizeTopics(topicsPayload);
 
@@ -557,40 +359,6 @@ async function loadTopicsForProject(project) {
       2
     );
     throw error;
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
   }
 }
 
@@ -602,7 +370,7 @@ async function loadCurrentProject() {
 
     if (!project) {
       currentProjectName.textContent = "Projeto nao encontrado";
-<<<<<<< ours
+
       currentProjectMeta.textContent = "Abra a extensao dentro de um projeto.";
       return;
     }
@@ -611,7 +379,7 @@ async function loadCurrentProject() {
     currentProjectMeta.textContent = [project.id, project.number].filter(Boolean).join(" | ");
   } catch (error) {
     currentProjectName.textContent = "Falha ao ler projeto";
-=======
+
       currentProjectMeta.textContent =
         "A extensao precisa ser aberta dentro do contexto de um projeto.";
       currentProjectId = "";
@@ -627,51 +395,11 @@ async function loadCurrentProject() {
   } catch (error) {
     currentProjectId = "";
     currentProjectName.textContent = "Falha ao ler o projeto atual";
->>>>>>> theirs
+
     currentProjectMeta.textContent = error.message;
   }
 }
 
-<<<<<<< ours
-=======
-async function loadUserAndProjects() {
-  if (!accessToken) {
-    throw new Error("A extensao ainda nao recebeu um access token.");
-  }
-
-  showStatus("Consultando dados do usuario e lista de projetos...", "info");
-
-  const [userPayload, projectsPayload] = await Promise.all([
-    fetchJson("https://app.connect.trimble.com/tc/api/2.0/users/me", accessToken),
-    fetchJson("https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false", accessToken),
-  ]);
-
-  userName.textContent =
-    userPayload.name || userPayload.displayName || userPayload.fullName || "Usuario autenticado";
-  userEmail.textContent =
-    userPayload.email || userPayload.mail || "E-mail nao informado";
-
-  const projects = normalizeProjects(projectsPayload);
-  const resolvedProjectId =
-    currentProjectId && projects.some((project) => project.id === currentProjectId)
-      ? currentProjectId
-      : selectedProjectId || projects[0]?.id || "";
-
-  selectedProjectId = resolvedProjectId;
-  renderProjectList(projects);
-
-  if (resolvedProjectId) {
-    const selectedProject =
-      projects.find((project) => project.id === resolvedProjectId) || { id: resolvedProjectId };
-    await loadTopicsForProject(selectedProject);
-  } else {
-    setTopicLoading("Nenhum projeto disponivel para carregar topicos.");
-  }
-
-  showStatus("Dados carregados com sucesso a partir da sessao do Trimble Connect.", "success");
-}
-
->>>>>>> theirs
 async function requestAccessToken() {
   const result = await workspaceApi.extension.requestPermission("accesstoken");
 
