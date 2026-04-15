@@ -18,8 +18,10 @@ let accessToken = "";
 let selectedProjectId = "";
 
 const topicEndpointCandidates = [
-  (projectId) => `https://app.connect.trimble.com/bcf/3.0/projects/${projectId}/topics`,
-  (projectId) => `https://app.connect.trimble.com/bcf/2.1/projects/${projectId}/topics`,
+  (projectId) => `https://web.connect.trimble.com/bcf/3.0/projects/${encodeURIComponent(projectId)}/topics`,
+  (projectId) => `https://web.connect.trimble.com/bcf/2.1/projects/${encodeURIComponent(projectId)}/topics`,
+  (projectId) => `https://app.connect.trimble.com/bcf/3.0/projects/${encodeURIComponent(projectId)}/topics`,
+  (projectId) => `https://app.connect.trimble.com/bcf/2.1/projects/${encodeURIComponent(projectId)}/topics`,
 ];
 
 function showStatus(message, type = "info") {
