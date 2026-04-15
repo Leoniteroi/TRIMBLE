@@ -37,6 +37,14 @@ Como os payloads podem variar por endpoint/versao, o codigo aplica normalizacao 
 
 Assim a UI trabalha sempre com um formato interno consistente, mesmo quando os campos mudam entre APIs.
 
+## Diagnostico rapido
+
+- **Status `pending` ao solicitar token**: o usuario ainda nao confirmou permissao no painel do Trimble Connect.
+- **Status `denied`**: o usuario negou acesso ao `accesstoken`; e preciso pedir nova permissao.
+- **Lista de projetos vazia**: valide se o usuario autenticado possui projetos visiveis na organizacao.
+- **Erro HTTP nos topicos**: a extensao tenta BCF `3.0` e depois `2.1`; se ambos falharem, a mensagem de erro retornada pela API aparece no status.
+- **Projeto atual nao encontrado**: abra a extensao dentro do contexto de um projeto, nao apenas na tela geral.
+
 ## Instalacao
 
 1. Hospede estes arquivos em HTTPS.

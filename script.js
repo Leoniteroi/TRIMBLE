@@ -140,6 +140,11 @@ function renderProjectList(projects) {
   });
 }
 
+/**
+ * Normaliza respostas de projetos vindas de formatos diferentes da API.
+ * @param {any} payload Retorno bruto do endpoint de projetos.
+ * @returns {Array<{id: string, name: string, number: string, raw: object}>}
+ */
 function normalizeProjects(payload) {
   const candidates = Array.isArray(payload)
     ? payload
