@@ -2,20 +2,34 @@ const statusMessage = document.getElementById("statusMessage");
 const projectList = document.getElementById("projectList");
 const rawOutput = document.getElementById("rawOutput");
 const refreshButton = document.getElementById("refreshButton");
-const connectionState = document.getElementById("connectionState");
-const tokenState = document.getElementById("tokenState");
-const permissionState = document.getElementById("permissionState");
-const userName = document.getElementById("userName");
-const userEmail = document.getElementById("userEmail");
 const currentProjectName = document.getElementById("currentProjectName");
 const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
-const topicList = document.getElementById("topicList");
+const projectList = document.getElementById("projectList");
 const topicCount = document.getElementById("topicCount");
+const topicList = document.getElementById("topicList");
+const rawOutput = document.getElementById("rawOutput");
 
-let workspaceApi = null;
+let workspaceApi;
 let accessToken = "";
 let selectedProjectId = "";
+let projects = [];
+
+function setStatus(message) {
+let currentProjectId = "";
+
+function buildBcfTopicEndpointCandidates(projectId) {
+  const encodedProjectId = encodeURIComponent(projectId);
+  const pathV30 = `/bcf/3.0/projects/${encodedProjectId}/topics`;
+  const pathV21 = `/bcf/2.1/projects/${encodedProjectId}/topics`;
+  const host = "https://app.connect.trimble.com";
+
+  return [
+    { version: "3.0", url: `${host}${pathV30}` },
+    { version: "3.0", url: `${host}${pathV30}?includeAuthorization=true` },
+    { version: "2.1", url: `${host}${pathV21}` },
+    { version: "2.1", url: `${host}${pathV21}?includeAuthorization=true` },
+  ];
 let currentProjectId = "";
 
 const TOPICS_REGION_HOSTS = {
@@ -24,23 +38,50 @@ const TOPICS_REGION_HOSTS = {
   asiapacific: "https://open31.connect.trimble.com",
   australia: "https://open32.connect.trimble.com",
 };
-const TOPICS_API_VERSIONS = ["3.0", "2.1"];
-const TOPICS_PAGE_SIZE = 500;
-const FETCH_TIMEOUT_MS = 15000;
 
-function buildBcfTopicEndpointCandidates(projectId, orderedHosts) {
+function buildBcfTopicEndpointCandidates(projectId) {
   const encodedProjectId = encodeURIComponent(projectId);
-  const hosts = orderedHosts?.length ? orderedHosts : Object.values(TOPICS_REGION_HOSTS);
+  const bcf3Path = `/bcf/3.0/projects/${encodedProjectId}/topics`;
+  const bcf21Path = `/bcf/2.1/projects/${encodedProjectId}/topics?top=500`;
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
 
-  return hosts.flatMap((host) =>
-    TOPICS_API_VERSIONS.map((version) => ({
-      version,
-      url:
-        version === "2.1"
-          ? `${host}/bcf/2.1/projects/${encodedProjectId}/topics?top=${TOPICS_PAGE_SIZE}`
-          : `${host}/bcf/3.0/projects/${encodedProjectId}/topics`,
-    }))
-  );
+  return allHosts.flatMap((host) => [
+    { version: "3.0", url: `${host}${bcf3Path}` },
+    { version: "2.1", url: `${host}${bcf21Path}` },
+  ]);
+}
+
+function normalizeProjectLocation(location) {
+  return String(location || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
+function prioritizeTopicHostsByProject(projectRaw) {
+  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
+  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  if (!prioritizedHost) {
+    return allHosts;
+  }
+
+function prioritizeTopicHostsByProject(projectRaw) {
+  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
+  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  if (!prioritizedHost) {
+    return allHosts;
+  }
+
+  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
+}
+
+function showStatus(message, type = "info") {
+  statusMessage.textContent = message;
+  statusMessage.className = `status-message ${type}`;
+
 }
 
 function normalizeProjectLocation(location) {
@@ -63,177 +104,169 @@ function prioritizeTopicHostsByProject(projectRaw) {
 
 function showStatus(message, type = "info") {
   statusMessage.textContent = message;
-  statusMessage.className = `status-message ${type}`;
 }
 
-function setConnectionState(message) {
-  connectionState.textContent = message;
+function setJson(data) {
+  rawOutput.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
-function setTokenState(message) {
-  tokenState.textContent = message;
+function normalizeProjects(payload) {
+  const items = Array.isArray(payload)
+    ? payload
+    : payload?.data || payload?.items || payload?.projects || payload?.results || [];
+
+  return items.map((project) => ({
+    id: project.id || project.projectId || project.identifier || "",
+    name: project.name || project.projectName || "Projeto sem nome",
+    number: project.number || project.projectNumber || project.externalId || "",
+    location: project.location || "",
+    raw: project,
+  }));
 }
 
-function setPermissionState(message) {
-  permissionState.textContent = message;
+function normalizeTopics(payload) {
+  const items = Array.isArray(payload)
+    ? payload
+    : payload?.data || payload?.items || payload?.topics || payload?.results || [];
+
+  return items.map((topic) => ({
+    id: topic.topic_id || topic.id || topic.guid || "",
+    title: topic.title || topic.topic_title || topic.description || "Topico sem titulo",
+    meta: [topic.topic_status || topic.status, topic.topic_type || topic.type, topic.guid || topic.id]
+      .filter(Boolean)
+      .join(" | "),
+    raw: topic,
+  }));
 }
 
-function renderTopicList(topics) {
-  topicList.innerHTML = "";
-  topicCount.textContent = `${topics.length} topico${topics.length === 1 ? "" : "s"}`;
+async function fetchJson(url, token) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
-  if (!topics.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Nenhum topico retornado para este projeto.";
-    topicList.appendChild(empty);
-    return;
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
   }
 
-  topics.forEach((topic) => {
-    const card = document.createElement("article");
-    card.className = "topic-item";
-
-    const title = document.createElement("span");
-    title.className = "topic-title";
-    title.textContent = topic.title || "Topico sem titulo";
-
-    const meta = document.createElement("span");
-    meta.className = "topic-meta";
-    meta.textContent = [topic.status, topic.type, topic.guid || topic.id]
-      .filter(Boolean)
-      .join(" | ");
-
-    card.append(title, meta);
-    topicList.appendChild(card);
-  });
+  return response.json();
 }
 
-function setTopicLoading(message) {
-  topicList.innerHTML = `<p class="empty-state">${message}</p>`;
-  topicCount.textContent = "0 topicos";
-}
-
-function renderProjectList(projects) {
+function renderProjects() {
   projectList.innerHTML = "";
-  projectCount.textContent = `${projects.length} projeto${projects.length === 1 ? "" : "s"}`;
+  projectCount.textContent = String(projects.length);
 
   if (!projects.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Nenhum projeto retornado para este usuario.";
-    projectList.appendChild(empty);
-    rawOutput.textContent = "Sem projetos para exibir.";
+    projectList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
     return;
   }
 
   projects.forEach((project, index) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "project-item";
+    button.className = "item";
     if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
-      button.classList.add("active");
       selectedProjectId = project.id;
-      rawOutput.textContent = JSON.stringify(project.raw, null, 2);
+      button.classList.add("active");
     }
 
     const title = document.createElement("span");
-    title.className = "project-title";
-    title.textContent = project.name || "Projeto sem nome";
+    title.className = "title";
+    title.textContent = project.name;
 
     const meta = document.createElement("span");
-    meta.className = "project-meta";
+    meta.className = "meta";
     meta.textContent = [project.number, project.id].filter(Boolean).join(" | ");
 
     button.append(title, meta);
     button.addEventListener("click", async () => {
       selectedProjectId = project.id;
-      rawOutput.textContent = JSON.stringify(project.raw, null, 2);
-      document.querySelectorAll(".project-item").forEach((item) => {
+      document.querySelectorAll("#projectList .item").forEach((item) => {
         item.classList.toggle("active", item === button);
       });
-
-      try {
-        await loadTopicsForProject(project);
-      } catch (error) {
-        showStatus(`Nao foi possivel carregar os topicos do projeto: ${error.message}`, "error");
-      }
+      setJson(project.raw);
+      await loadTopics(project);
     });
 
     projectList.appendChild(button);
   });
 }
 
-function normalizeProjects(payload) {
-  const candidates = Array.isArray(payload)
-    ? payload
-    : payload?.data || payload?.items || payload?.projects || payload?.results || [];
+function renderTopics(items) {
+  topicList.innerHTML = "";
+  topicCount.textContent = String(items.length);
 
-  return candidates.map((project) => ({
-    id: project.id || project.projectId || project.identifier || "",
-    name: project.name || project.projectName || "Projeto sem nome",
-    number: project.number || project.projectNumber || project.externalId || "",
-    raw: project,
-  }));
+  if (!items.length) {
+    topicList.innerHTML = '<p class="empty">Nenhum topico encontrado.</p>';
+    return;
+  }
+
+  items.forEach((topic) => {
+    const article = document.createElement("article");
+    article.className = "item";
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = topic.title;
+
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = topic.meta;
+
+    article.append(title, meta);
+    topicList.appendChild(article);
+  });
 }
 
-function normalizeTopics(payload) {
-  const candidates = Array.isArray(payload)
-    ? payload
-    : payload?.data || payload?.items || payload?.topics || payload?.results || [];
+async function loadTopics(project) {
+  if (!project?.id || !accessToken) {
 
-  return candidates.map((topic) => ({
-    id: topic.topic_id || topic.id || topic.guid || "",
-    guid: topic.guid || topic.topic_id || topic.id || "",
-    title: topic.title || topic.topic_title || topic.description || "",
-    status: topic.topic_status || topic.status || "",
-    type: topic.topic_type || topic.type || "",
-    raw: topic,
-  }));
-}
+async function fetchBcfTopics(projectId, token) {
+  const errors = [];
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
-async function fetchJson(url, token, extraHeaders = {}) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let response;
-  try {
-    response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        ...extraHeaders,
-      },
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`HTTP ${response.status}: ${body}`);
-  }
+async function fetchBcfTopics(projectId, token) {
+  const errors = [];
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
-  if (response.status === 204) {
-    return [];
-  }
+async function fetchBcfTopics(projectId, token) {
+  const errors = [];
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
 
-  const bodyText = await response.text();
-  if (!bodyText.trim()) {
-    return [];
-  }
-
-  return JSON.parse(bodyText);
-}
+  for (const endpoint of endpointCandidates) {
+    try {
+      const payload = await fetchJson(endpoint.url, token, {
+        "Content-Type": "application/json",
+      });
 
 async function fetchBcfTopics(projectId, token, projectRaw) {
   const errors = [];
   const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
-  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId, orderedHosts);
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId).sort((a, b) => {
+    const hostA = orderedHosts.indexOf(new URL(a.url).origin);
+    const hostB = orderedHosts.indexOf(new URL(b.url).origin);
+    return hostA - hostB;
+  });
 
   for (const endpoint of endpointCandidates) {
     try {
       const payload = await fetchJson(endpoint.url, token);
+
+async function fetchBcfTopics(projectId, token, projectRaw) {
+  const errors = [];
+  const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId).sort((a, b) => {
+    const hostA = orderedHosts.indexOf(new URL(a.url).origin);
+    const hostB = orderedHosts.indexOf(new URL(b.url).origin);
+    return hostA - hostB;
+  });
+
+  for (const endpoint of endpointCandidates) {
+    try {
+      const payload = await fetchJson(endpoint.url, token);
+
       return {
         payload,
         endpoint,
@@ -242,7 +275,7 @@ async function fetchBcfTopics(projectId, token, projectRaw) {
       errors.push({
         url: endpoint.url,
         version: endpoint.version,
-        message: error?.name === "AbortError" ? "Timeout ao consultar endpoint" : error.message,
+        message: error.message,
       });
     }
   }
@@ -259,16 +292,48 @@ async function loadTopicsForProject(project) {
 
   if (!projectId) {
     setTopicLoading("O projeto selecionado nao possui identificador valido.");
+
     return;
   }
 
-  if (!accessToken) {
-    throw new Error("A extensao ainda nao recebeu um access token.");
-  }
+  setStatus("Carregando topicos...");
+  topicList.innerHTML = '<p class="empty">Carregando...</p>';
+
+
+  try {
+    const payload = await fetchJson(
+      `/api/projects/${encodeURIComponent(project.id)}/topics?location=${encodeURIComponent(project.location)}`,
+      accessToken
+    );
+    const topics = normalizeTopics(payload);
+    renderTopics(topics);
+    setJson({ projectId: project.id, topics, raw: payload });
+    setStatus("Topicos carregados.");
+  } catch (error) {
+    topicList.innerHTML = `<p class="empty">${error.message}</p>`;
+    topicCount.textContent = "0";
+    setJson({ projectId: project.id, projectRaw: project.raw, error: error.message });
+    setStatus("Falha ao carregar topicos.");
 
   setTopicLoading("Carregando topicos do projeto selecionado...");
   try {
+
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken);
+
     const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+
+    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
+
     const topicsPayload = topicsResponse.payload;
     const topics = normalizeTopics(topicsPayload);
 
@@ -307,6 +372,16 @@ async function loadCurrentProject() {
 
     if (!project) {
       currentProjectName.textContent = "Projeto nao encontrado";
+
+      currentProjectMeta.textContent = "Abra a extensao dentro de um projeto.";
+      return;
+    }
+
+    currentProjectName.textContent = project.name || project.projectName || "Projeto atual";
+    currentProjectMeta.textContent = [project.id, project.number].filter(Boolean).join(" | ");
+  } catch (error) {
+    currentProjectName.textContent = "Falha ao ler projeto";
+
       currentProjectMeta.textContent =
         "A extensao precisa ser aberta dentro do contexto de um projeto.";
       currentProjectId = "";
@@ -319,134 +394,84 @@ async function loadCurrentProject() {
     currentProjectMeta.textContent = [project.id, project.number]
       .filter(Boolean)
       .join(" | ");
-  } catch (error) {
+  } try{}catch (error) {
     currentProjectId = "";
     currentProjectName.textContent = "Falha ao ler o projeto atual";
+
     currentProjectMeta.textContent = error.message;
   }
 }
 
-async function loadUserAndProjects() {
-  if (!accessToken) {
-    throw new Error("A extensao ainda nao recebeu um access token.");
-  }
-
-  showStatus("Consultando dados do usuario e lista de projetos...", "info");
-
-  const [userPayload, projectsPayload] = await Promise.all([
-    fetchJson("https://app.connect.trimble.com/tc/api/2.0/users/me", accessToken),
-    fetchJson("https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false", accessToken),
-  ]);
-
-  userName.textContent =
-    userPayload.name || userPayload.displayName || userPayload.fullName || "Usuario autenticado";
-  userEmail.textContent =
-    userPayload.email || userPayload.mail || "E-mail nao informado";
-
-  const projects = normalizeProjects(projectsPayload);
-  const resolvedProjectId =
-    currentProjectId && projects.some((project) => project.id === currentProjectId)
-      ? currentProjectId
-      : selectedProjectId || projects[0]?.id || "";
-
-  selectedProjectId = resolvedProjectId;
-  renderProjectList(projects);
-
-  if (resolvedProjectId) {
-    const selectedProject =
-      projects.find((project) => project.id === resolvedProjectId) || { id: resolvedProjectId };
-    await loadTopicsForProject(selectedProject);
-  } else {
-    setTopicLoading("Nenhum projeto disponivel para carregar topicos.");
-  }
-
-  showStatus("Dados carregados com sucesso a partir da sessao do Trimble Connect.", "success");
-}
-
 async function requestAccessToken() {
-  setPermissionState("Solicitando consentimento");
-  setTokenState("Pendente");
-
   const result = await workspaceApi.extension.requestPermission("accesstoken");
 
   if (result === "pending") {
-    showStatus("Aguardando o usuario conceder permissao ao token na interface do Connect.", "info");
+    setStatus("Aguardando permissao do usuario.");
     return;
   }
 
   if (result === "denied") {
-    setPermissionState("Negado");
-    setTokenState("Acesso negado");
-    throw new Error("O usuario negou a permissao do access token para a extensao.");
+    throw new Error("Permissao do token negada.");
   }
 
   accessToken = result;
-  setPermissionState("Concedido");
-  setTokenState("Recebido");
 }
 
-async function initializeExtension() {
-  showStatus("Conectando ao Workspace API do Trimble Connect...", "info");
+async function loadProjects() {
+  setStatus("Carregando projetos...");
 
-  workspaceApi = await window.TrimbleConnectWorkspace.connect(
-    window.parent,
-    async (event, args) => {
-      if (event === "extension.accessToken") {
-        if (typeof args?.data === "string" && args.data !== "pending" && args.data !== "denied") {
-          accessToken = args.data;
-          setPermissionState("Concedido");
-          setTokenState("Atualizado pelo Connect");
+  const payload = await fetchJson("https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false", accessToken);
+  projects = normalizeProjects(payload);
+  renderProjects();
 
-          try {
-            await loadUserAndProjects();
-          } catch (error) {
-            showStatus(`Falha ao atualizar dados apos refresh do token: ${error.message}`, "error");
-          }
-        }
-      }
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
+  if (selectedProject) {
+    setJson(selectedProject.raw);
+    await loadTopics(selectedProject);
+  } else {
+    topicList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
+    topicCount.textContent = "0";
+    setJson("Sem dados.");
+    setStatus("Nenhum projeto encontrado.");
+  }
+}
 
-      if (event === "extension.command") {
-        showStatus(`Comando recebido da extensao: ${args?.data || "sem payload"}`, "info");
-      }
-    },
-    30000
-  );
+async function initialize() {
+  workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
+    if (event === "extension.accessToken" && typeof args?.data === "string") {
+      accessToken = args.data;
+      await loadProjects();
+    }
+  });
 
-  setConnectionState("Conectado");
   await loadCurrentProject();
   await requestAccessToken();
 
   if (accessToken) {
-    await loadUserAndProjects();
+    await loadProjects();
   }
 }
 
 refreshButton.addEventListener("click", async () => {
   refreshButton.disabled = true;
+
   try {
     await loadCurrentProject();
-
     if (!accessToken) {
       await requestAccessToken();
     }
-
     if (accessToken) {
-      await loadUserAndProjects();
+      await loadProjects();
     }
   } catch (error) {
-    showStatus(`Nao foi possivel atualizar os dados: ${error.message}`, "error");
+    setStatus(error.message);
+    setJson(error.stack || error.message);
   } finally {
     refreshButton.disabled = false;
   }
 });
 
-initializeExtension().catch((error) => {
-  setConnectionState("Falhou");
-  setPermissionState("Indisponivel");
-  setTokenState("Indisponivel");
-  showStatus(
-    `Nao foi possivel iniciar a extensao. Abra esta pagina dentro do Trimble Connect. Detalhes: ${error.message}`,
-    "error"
-  );
-  rawOutput.textContent = error.stack || error.message;
+initialize().catch((error) => {
+  setStatus(error.message);
+  setJson(error.stack || error.message);
 });
