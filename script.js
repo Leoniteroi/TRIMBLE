@@ -18,10 +18,17 @@ let accessToken = "";
 let selectedProjectId = "";
 let currentProjectId = "";
 
-const topicEndpointCandidates = [
-  (projectId) => `https://app.connect.trimble.com/bcf/3.0/projects/${encodeURIComponent(projectId)}/topics`,
-  (projectId) => `https://app.connect.trimble.com/bcf/2.1/projects/${encodeURIComponent(projectId)}/topics`,
-];
+function buildTopicEndpointCandidates(projectId, location) {
+  const encodedProjectId = encodeURIComponent(projectId);
+  const query = location ? `?location=${encodeURIComponent(location)}` : "";
+
+  return [
+    `https://web.connect.trimble.com/api/projects/${encodedProjectId}/topics${query}`,
+    `https://app.connect.trimble.com/api/projects/${encodedProjectId}/topics${query}`,
+    `https://app.connect.trimble.com/bcf/3.0/projects/${encodedProjectId}/topics`,
+    `https://app.connect.trimble.com/bcf/2.1/projects/${encodedProjectId}/topics`,
+  ];
+}
 
 function showStatus(message, type = "info") {
   statusMessage.textContent = message;
@@ -116,7 +123,7 @@ function renderProjectList(projects) {
       });
 
       try {
-        await loadTopicsForProject(project.id);
+        await loadTopicsForProject(project);
       } catch (error) {
         showStatus(`Nao foi possivel carregar os topicos do projeto: ${error.message}`, "error");
       }
@@ -170,12 +177,11 @@ async function fetchJson(url, token) {
   return response.json();
 }
 
-async function fetchTopics(projectId, token) {
+async function fetchTopics(projectId, token, projectLocation) {
   let lastError = null;
+  const endpointCandidates = buildTopicEndpointCandidates(projectId, projectLocation);
 
-  for (const buildUrl of topicEndpointCandidates) {
-    const url = buildUrl(projectId);
-
+  for (const url of endpointCandidates) {
     try {
       return await fetchJson(url, token);
     } catch (error) {
@@ -186,7 +192,11 @@ async function fetchTopics(projectId, token) {
   throw lastError || new Error("Nenhum endpoint de topicos respondeu com sucesso.");
 }
 
-async function loadTopicsForProject(projectId) {
+async function loadTopicsForProject(project) {
+  const projectId = typeof project === "string" ? project : project?.id || project?.projectId || "";
+  const projectRaw = typeof project === "string" ? null : project?.raw || project;
+  const projectLocation = projectRaw?.location || "";
+
   if (!projectId) {
     setTopicLoading("O projeto selecionado nao possui identificador valido.");
     return;
@@ -197,20 +207,34 @@ async function loadTopicsForProject(projectId) {
   }
 
   setTopicLoading("Carregando topicos do projeto selecionado...");
+  try {
+    const topicsPayload = await fetchTopics(projectId, accessToken, projectLocation);
+    const topics = normalizeTopics(topicsPayload);
 
-  const topicsPayload = await fetchTopics(projectId, accessToken);
-  const topics = normalizeTopics(topicsPayload);
-
-  renderTopicList(topics);
-  rawOutput.textContent = JSON.stringify(
-    {
-      projectId,
-      topics,
-      raw: topicsPayload,
-    },
-    null,
-    2
-  );
+    renderTopicList(topics);
+    rawOutput.textContent = JSON.stringify(
+      {
+        projectId,
+        projectRaw,
+        topics,
+        raw: topicsPayload,
+      },
+      null,
+      2
+    );
+  } catch (error) {
+    renderTopicList([]);
+    rawOutput.textContent = JSON.stringify(
+      {
+        projectId,
+        projectRaw,
+        error: error.message,
+      },
+      null,
+      2
+    );
+    throw error;
+  }
 }
 
 async function loadCurrentProject() {
@@ -267,7 +291,9 @@ async function loadUserAndProjects() {
   renderProjectList(projects);
 
   if (resolvedProjectId) {
-    await loadTopicsForProject(resolvedProjectId);
+    const selectedProject =
+      projects.find((project) => project.id === resolvedProjectId) || { id: resolvedProjectId };
+    await loadTopicsForProject(selectedProject);
   } else {
     setTopicLoading("Nenhum projeto disponivel para carregar topicos.");
   }
