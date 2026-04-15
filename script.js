@@ -1,154 +1,51 @@
 const statusMessage = document.getElementById("statusMessage");
-const projectList = document.getElementById("projectList");
-const rawOutput = document.getElementById("rawOutput");
 const refreshButton = document.getElementById("refreshButton");
-const connectionState = document.getElementById("connectionState");
-const tokenState = document.getElementById("tokenState");
-const permissionState = document.getElementById("permissionState");
-const userName = document.getElementById("userName");
-const userEmail = document.getElementById("userEmail");
 const currentProjectName = document.getElementById("currentProjectName");
 const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
-const topicList = document.getElementById("topicList");
+const projectList = document.getElementById("projectList");
 const topicCount = document.getElementById("topicCount");
+const topicList = document.getElementById("topicList");
+const rawOutput = document.getElementById("rawOutput");
 
-let workspaceApi = null;
+let workspaceApi;
 let accessToken = "";
 let selectedProjectId = "";
+let projects = [];
 
-const topicEndpointCandidates = [
-  (projectId) => `https://app.connect.trimble.com/bcf/3.0/projects/${projectId}/topics`,
-  (projectId) => `https://app.connect.trimble.com/bcf/2.1/projects/${projectId}/topics`,
-];
-
-function showStatus(message, type = "info") {
+function setStatus(message) {
   statusMessage.textContent = message;
-  statusMessage.className = `status-message ${type}`;
 }
 
-function setConnectionState(message) {
-  connectionState.textContent = message;
-}
-
-function setTokenState(message) {
-  tokenState.textContent = message;
-}
-
-function setPermissionState(message) {
-  permissionState.textContent = message;
-}
-
-function renderTopicList(topics) {
-  topicList.innerHTML = "";
-  topicCount.textContent = `${topics.length} topico${topics.length === 1 ? "" : "s"}`;
-
-  if (!topics.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Nenhum topico retornado para este projeto.";
-    topicList.appendChild(empty);
-    return;
-  }
-
-  topics.forEach((topic) => {
-    const card = document.createElement("article");
-    card.className = "topic-item";
-
-    const title = document.createElement("span");
-    title.className = "topic-title";
-    title.textContent = topic.title || "Topico sem titulo";
-
-    const meta = document.createElement("span");
-    meta.className = "topic-meta";
-    meta.textContent = [topic.status, topic.type, topic.guid || topic.id]
-      .filter(Boolean)
-      .join(" | ");
-
-    card.append(title, meta);
-    topicList.appendChild(card);
-  });
-}
-
-function setTopicLoading(message) {
-  topicList.innerHTML = `<p class="empty-state">${message}</p>`;
-  topicCount.textContent = "0 topicos";
-}
-
-function renderProjectList(projects) {
-  projectList.innerHTML = "";
-  projectCount.textContent = `${projects.length} projeto${projects.length === 1 ? "" : "s"}`;
-
-  if (!projects.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "Nenhum projeto retornado para este usuario.";
-    projectList.appendChild(empty);
-    rawOutput.textContent = "Sem projetos para exibir.";
-    return;
-  }
-
-  projects.forEach((project, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "project-item";
-    if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
-      button.classList.add("active");
-      selectedProjectId = project.id;
-      rawOutput.textContent = JSON.stringify(project.raw, null, 2);
-    }
-
-    const title = document.createElement("span");
-    title.className = "project-title";
-    title.textContent = project.name || "Projeto sem nome";
-
-    const meta = document.createElement("span");
-    meta.className = "project-meta";
-    meta.textContent = [project.number, project.id].filter(Boolean).join(" | ");
-
-    button.append(title, meta);
-    button.addEventListener("click", async () => {
-      selectedProjectId = project.id;
-      rawOutput.textContent = JSON.stringify(project.raw, null, 2);
-      document.querySelectorAll(".project-item").forEach((item) => {
-        item.classList.toggle("active", item === button);
-      });
-
-      try {
-        await loadTopicsForProject(project.id);
-      } catch (error) {
-        showStatus(`Nao foi possivel carregar os topicos do projeto: ${error.message}`, "error");
-      }
-    });
-
-    projectList.appendChild(button);
-  });
+function setJson(data) {
+  rawOutput.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
 function normalizeProjects(payload) {
-  const candidates = Array.isArray(payload)
+  const items = Array.isArray(payload)
     ? payload
     : payload?.data || payload?.items || payload?.projects || payload?.results || [];
 
-  return candidates.map((project) => ({
+  return items.map((project) => ({
     id: project.id || project.projectId || project.identifier || "",
     name: project.name || project.projectName || "Projeto sem nome",
     number: project.number || project.projectNumber || project.externalId || "",
+    location: project.location || "",
     raw: project,
   }));
 }
 
 function normalizeTopics(payload) {
-  const candidates = Array.isArray(payload)
+  const items = Array.isArray(payload)
     ? payload
     : payload?.data || payload?.items || payload?.topics || payload?.results || [];
 
-  return candidates.map((topic) => ({
+  return items.map((topic) => ({
     id: topic.topic_id || topic.id || topic.guid || "",
-    guid: topic.guid || topic.topic_id || topic.id || "",
-    title: topic.title || topic.topic_title || topic.description || "",
-    status: topic.topic_status || topic.status || "",
-    type: topic.topic_type || topic.type || "",
+    title: topic.title || topic.topic_title || topic.description || "Topico sem titulo",
+    meta: [topic.topic_status || topic.status, topic.topic_type || topic.type, topic.guid || topic.id]
+      .filter(Boolean)
+      .join(" | "),
     raw: topic,
   }));
 }
@@ -156,60 +53,107 @@ function normalizeTopics(payload) {
 async function fetchJson(url, token) {
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${token}`,
       Accept: "application/json",
+      Authorization: `Bearer ${token}`,
     },
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`HTTP ${response.status}: ${body}`);
+    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
   }
 
   return response.json();
 }
 
-async function fetchTopics(projectId, token) {
-  let lastError = null;
+function renderProjects() {
+  projectList.innerHTML = "";
+  projectCount.textContent = String(projects.length);
 
-  for (const buildUrl of topicEndpointCandidates) {
-    const url = buildUrl(projectId);
-
-    try {
-      return await fetchJson(url, token);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError || new Error("Nenhum endpoint de topicos respondeu com sucesso.");
-}
-
-async function loadTopicsForProject(projectId) {
-  if (!projectId) {
-    setTopicLoading("O projeto selecionado nao possui identificador valido.");
+  if (!projects.length) {
+    projectList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
     return;
   }
 
-  if (!accessToken) {
-    throw new Error("A extensao ainda nao recebeu um access token.");
+  projects.forEach((project, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "item";
+    if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
+      selectedProjectId = project.id;
+      button.classList.add("active");
+    }
+
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = project.name;
+
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = [project.number, project.id].filter(Boolean).join(" | ");
+
+    button.append(title, meta);
+    button.addEventListener("click", async () => {
+      selectedProjectId = project.id;
+      document.querySelectorAll("#projectList .item").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      setJson(project.raw);
+      await loadTopics(project);
+    });
+
+    projectList.appendChild(button);
+  });
+}
+
+function renderTopics(items) {
+  topicList.innerHTML = "";
+  topicCount.textContent = String(items.length);
+
+  if (!items.length) {
+    topicList.innerHTML = '<p class="empty">Nenhum topico encontrado.</p>';
+    return;
   }
 
-  setTopicLoading("Carregando topicos do projeto selecionado...");
+  items.forEach((topic) => {
+    const article = document.createElement("article");
+    article.className = "item";
 
-  const topicsPayload = await fetchTopics(projectId, accessToken);
-  const topics = normalizeTopics(topicsPayload);
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = topic.title;
 
-  renderTopicList(topics);
-  rawOutput.textContent = JSON.stringify(
-    {
-      projectId,
-      topics,
-      raw: topicsPayload,
-    },
-    null,
-    2
-  );
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = topic.meta;
+
+    article.append(title, meta);
+    topicList.appendChild(article);
+  });
+}
+
+async function loadTopics(project) {
+  if (!project?.id || !accessToken) {
+    return;
+  }
+
+  setStatus("Carregando topicos...");
+  topicList.innerHTML = '<p class="empty">Carregando...</p>';
+
+  try {
+    const payload = await fetchJson(
+      `/api/projects/${encodeURIComponent(project.id)}/topics?location=${encodeURIComponent(project.location)}`,
+      accessToken
+    );
+    const topics = normalizeTopics(payload);
+    renderTopics(topics);
+    setJson({ projectId: project.id, topics, raw: payload });
+    setStatus("Topicos carregados.");
+  } catch (error) {
+    topicList.innerHTML = `<p class="empty">${error.message}</p>`;
+    topicCount.textContent = "0";
+    setJson({ projectId: project.id, projectRaw: project.raw, error: error.message });
+    setStatus("Falha ao carregar topicos.");
+  }
 }
 
 async function loadCurrentProject() {
@@ -220,135 +164,88 @@ async function loadCurrentProject() {
 
     if (!project) {
       currentProjectName.textContent = "Projeto nao encontrado";
-      currentProjectMeta.textContent =
-        "A extensao precisa ser aberta dentro do contexto de um projeto.";
+      currentProjectMeta.textContent = "Abra a extensao dentro de um projeto.";
       return;
     }
 
-    currentProjectName.textContent =
-      project.name || project.projectName || "Projeto atual";
-    currentProjectMeta.textContent = [project.id, project.number]
-      .filter(Boolean)
-      .join(" | ");
+    currentProjectName.textContent = project.name || project.projectName || "Projeto atual";
+    currentProjectMeta.textContent = [project.id, project.number].filter(Boolean).join(" | ");
   } catch (error) {
-    currentProjectName.textContent = "Falha ao ler o projeto atual";
+    currentProjectName.textContent = "Falha ao ler projeto";
     currentProjectMeta.textContent = error.message;
   }
 }
 
-async function loadUserAndProjects() {
-  if (!accessToken) {
-    throw new Error("A extensao ainda nao recebeu um access token.");
-  }
-
-  showStatus("Consultando dados do usuario e lista de projetos...", "info");
-
-  const [userPayload, projectsPayload] = await Promise.all([
-    fetchJson("https://app.connect.trimble.com/tc/api/2.0/users/me", accessToken),
-    fetchJson("https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false", accessToken),
-  ]);
-
-  userName.textContent =
-    userPayload.name || userPayload.displayName || userPayload.fullName || "Usuario autenticado";
-  userEmail.textContent =
-    userPayload.email || userPayload.mail || "E-mail nao informado";
-
-  const projects = normalizeProjects(projectsPayload);
-  renderProjectList(projects);
-
-  if (projects.length) {
-    await loadTopicsForProject(selectedProjectId || projects[0].id);
-  } else {
-    setTopicLoading("Nenhum projeto disponivel para carregar topicos.");
-  }
-
-  showStatus("Dados carregados com sucesso a partir da sessao do Trimble Connect.", "success");
-}
-
 async function requestAccessToken() {
-  setPermissionState("Solicitando consentimento");
-  setTokenState("Pendente");
-
   const result = await workspaceApi.extension.requestPermission("accesstoken");
 
   if (result === "pending") {
-    showStatus("Aguardando o usuario conceder permissao ao token na interface do Connect.", "info");
+    setStatus("Aguardando permissao do usuario.");
     return;
   }
 
   if (result === "denied") {
-    setPermissionState("Negado");
-    setTokenState("Acesso negado");
-    throw new Error("O usuario negou a permissao do access token para a extensao.");
+    throw new Error("Permissao do token negada.");
   }
 
   accessToken = result;
-  setPermissionState("Concedido");
-  setTokenState("Recebido");
 }
 
-async function initializeExtension() {
-  showStatus("Conectando ao Workspace API do Trimble Connect...", "info");
+async function loadProjects() {
+  setStatus("Carregando projetos...");
 
-  workspaceApi = await window.TrimbleConnectWorkspace.connect(
-    window.parent,
-    async (event, args) => {
-      if (event === "extension.accessToken") {
-        if (typeof args?.data === "string" && args.data !== "pending" && args.data !== "denied") {
-          accessToken = args.data;
-          setPermissionState("Concedido");
-          setTokenState("Atualizado pelo Connect");
+  const payload = await fetchJson("https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false", accessToken);
+  projects = normalizeProjects(payload);
+  renderProjects();
 
-          try {
-            await loadUserAndProjects();
-          } catch (error) {
-            showStatus(`Falha ao atualizar dados apos refresh do token: ${error.message}`, "error");
-          }
-        }
-      }
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
+  if (selectedProject) {
+    setJson(selectedProject.raw);
+    await loadTopics(selectedProject);
+  } else {
+    topicList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
+    topicCount.textContent = "0";
+    setJson("Sem dados.");
+    setStatus("Nenhum projeto encontrado.");
+  }
+}
 
-      if (event === "extension.command") {
-        showStatus(`Comando recebido da extensao: ${args?.data || "sem payload"}`, "info");
-      }
-    },
-    30000
-  );
+async function initialize() {
+  workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
+    if (event === "extension.accessToken" && typeof args?.data === "string") {
+      accessToken = args.data;
+      await loadProjects();
+    }
+  });
 
-  setConnectionState("Conectado");
   await loadCurrentProject();
   await requestAccessToken();
 
   if (accessToken) {
-    await loadUserAndProjects();
+    await loadProjects();
   }
 }
 
 refreshButton.addEventListener("click", async () => {
   refreshButton.disabled = true;
+
   try {
     await loadCurrentProject();
-
     if (!accessToken) {
       await requestAccessToken();
     }
-
     if (accessToken) {
-      await loadUserAndProjects();
+      await loadProjects();
     }
   } catch (error) {
-    showStatus(`Nao foi possivel atualizar os dados: ${error.message}`, "error");
+    setStatus(error.message);
+    setJson(error.stack || error.message);
   } finally {
     refreshButton.disabled = false;
   }
 });
 
-initializeExtension().catch((error) => {
-  setConnectionState("Falhou");
-  setPermissionState("Indisponivel");
-  setTokenState("Indisponivel");
-  showStatus(
-    `Nao foi possivel iniciar a extensao. Abra esta pagina dentro do Trimble Connect. Detalhes: ${error.message}`,
-    "error"
-  );
-  rawOutput.textContent = error.stack || error.message;
+initialize().catch((error) => {
+  setStatus(error.message);
+  setJson(error.stack || error.message);
 });
