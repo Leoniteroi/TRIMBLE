@@ -1,3 +1,20 @@
+<<<<<<< ours
+=======
+:root {
+  --navy: #012a5e;
+  --blue: #00a3e0;
+  --blue-deep: #0047bb;
+  --ink: #0f2c52;
+  --muted: #4d6484;
+  --line: #cfddf2;
+  --paper: #ffffff;
+  --mist: #e8f6fd;
+  --mint: #0f8a4b;
+  --rose: #bf1e2e;
+  --glow: radial-gradient(circle at top left, rgba(0, 163, 224, 0.24), transparent 42%);
+}
+
+>>>>>>> theirs
 * {
   box-sizing: border-box;
 }
@@ -19,8 +36,50 @@
 html,
 body {
   margin: 0;
+<<<<<<< ours
   min-height: 100%;
   background: var(--bg-primary) !important;
+=======
+  min-height: 100vh;
+  font-family: "Inter", system-ui, sans-serif;
+  color: var(--ink);
+  background:
+    var(--glow),
+    linear-gradient(135deg, #f4fbff 0%, #e9f2fb 48%, #f7fbff 100%);
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 }
 
 body {
@@ -37,11 +96,33 @@ body {
   font-size: 16px;
   line-height: 1.5;
   background:
+<<<<<<< ours
     radial-gradient(circle at top left, rgba(71, 198, 255, 0.22), transparent 30%),
     radial-gradient(circle at 85% 15%, rgba(29, 155, 240, 0.18), transparent 24%),
     linear-gradient(135deg, var(--bg-primary), var(--bg-secondary) 55%, #04111c);
   position: relative;
   isolation: isolate;
+=======
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 28%),
+    linear-gradient(155deg, #001835 0%, #012a5e 52%, #00a3e0 100%);
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 }
 
 .app-shell::before,
@@ -58,6 +139,38 @@ body {
     linear-gradient(90deg, rgba(71, 198, 255, 0.06) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(circle at center, black 45%, transparent 95%);
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+}
+
+.eyebrow,
+.section-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.hero-panel h1 {
+  margin: 18px 0 16px;
+  font-family: "Space Grotesk", "Inter", sans-serif;
+  font-size: clamp(2.1rem, 3.2vw, 3.5rem);
+  line-height: 1;
+>>>>>>> theirs
 }
 
 .app-shell::after {
@@ -166,7 +279,33 @@ h2 {
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
 }
 
+<<<<<<< ours
 .list {
+=======
+.muted {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.pill {
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  background: #e8f6fd;
+  color: var(--blue-deep);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.project-list {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.topic-list {
+  margin-top: 20px;
+>>>>>>> theirs
   display: grid;
   gap: 10px;
   margin-top: 12px;
@@ -190,6 +329,18 @@ button.item {
 
 button.item:hover {
   transform: translateY(-1px);
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
   border-color: rgba(71, 198, 255, 0.4);
 }
 
@@ -197,9 +348,77 @@ button.item.active {
   border-color: var(--accent-strong);
   background: rgba(14, 48, 71, 0.95);
   box-shadow: inset 0 0 0 1px rgba(71, 198, 255, 0.18);
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+  border-color: rgba(0, 163, 224, 0.45);
+  box-shadow: 0 14px 28px rgba(0, 163, 224, 0.14);
+}
+
+.project-item.active {
+  border-color: var(--blue);
+  background: linear-gradient(180deg, #ffffff 0%, #e8f6fd 100%);
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 }
 
 .title {
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+}
+
+.project-title,
+.project-meta {
+>>>>>>> theirs
   display: block;
   font-size: 1rem;
   line-height: 1.3;
