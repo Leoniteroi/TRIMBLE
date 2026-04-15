@@ -22,14 +22,14 @@ function buildBcfTopicEndpointCandidates(projectId) {
   const encodedProjectId = encodeURIComponent(projectId);
   const pathV30 = `/bcf/3.0/projects/${encodedProjectId}/topics`;
   const pathV21 = `/bcf/2.1/projects/${encodedProjectId}/topics`;
-  const hosts = ["https://web.connect.trimble.com", "https://app.connect.trimble.com"];
+  const host = "https://app.connect.trimble.com";
 
-  return hosts.flatMap((host) => [
+  return [
     { version: "3.0", url: `${host}${pathV30}` },
     { version: "3.0", url: `${host}${pathV30}?includeAuthorization=true` },
     { version: "2.1", url: `${host}${pathV21}` },
     { version: "2.1", url: `${host}${pathV21}?includeAuthorization=true` },
-  ]);
+  ];
 }
 
 function showStatus(message, type = "info") {
