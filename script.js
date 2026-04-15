@@ -1,3 +1,4 @@
+// Elementos principais da interface.
 const statusMessage = document.getElementById("statusMessage");
 const projectList = document.getElementById("projectList");
 const rawOutput = document.getElementById("rawOutput");
@@ -17,11 +18,17 @@ let workspaceApi = null;
 let accessToken = "";
 let selectedProjectId = "";
 
+// Ordem de fallback dos endpoints BCF para listagem de tópicos.
 const topicEndpointCandidates = [
   (projectId) => `https://app.connect.trimble.com/bcf/3.0/projects/${projectId}/topics`,
   (projectId) => `https://app.connect.trimble.com/bcf/2.1/projects/${projectId}/topics`,
 ];
 
+/**
+ * Exibe a mensagem de status principal na UI.
+ * @param {string} message Texto exibido para o usuário.
+ * @param {"info"|"success"|"error"} [type="info"] Tipo visual da mensagem.
+ */
 function showStatus(message, type = "info") {
   statusMessage.textContent = message;
   statusMessage.className = `status-message ${type}`;
@@ -39,6 +46,10 @@ function setPermissionState(message) {
   permissionState.textContent = message;
 }
 
+/**
+ * Renderiza os tópicos do projeto selecionado.
+ * @param {Array<{title?: string, status?: string, type?: string, guid?: string, id?: string}>} topics
+ */
 function renderTopicList(topics) {
   topicList.innerHTML = "";
   topicCount.textContent = `${topics.length} topico${topics.length === 1 ? "" : "s"}`;
@@ -75,6 +86,10 @@ function setTopicLoading(message) {
   topicCount.textContent = "0 topicos";
 }
 
+/**
+ * Renderiza a lista de projetos e define o projeto ativo.
+ * @param {Array<{id: string, name: string, number?: string, raw: object}>} projects
+ */
 function renderProjectList(projects) {
   projectList.innerHTML = "";
   projectCount.textContent = `${projects.length} projeto${projects.length === 1 ? "" : "s"}`;
@@ -138,6 +153,11 @@ function normalizeProjects(payload) {
   }));
 }
 
+/**
+ * Normaliza respostas de tópicos de versões diferentes da API BCF.
+ * @param {any} payload Retorno bruto do endpoint de tópicos.
+ * @returns {Array<{id: string, guid: string, title: string, status: string, type: string, raw: object}>}
+ */
 function normalizeTopics(payload) {
   const candidates = Array.isArray(payload)
     ? payload
@@ -153,6 +173,11 @@ function normalizeTopics(payload) {
   }));
 }
 
+/**
+ * Faz requisição autenticada e retorna JSON.
+ * @param {string} url Endpoint de destino.
+ * @param {string} token Access token da sessão do usuário.
+ */
 async function fetchJson(url, token) {
   const response = await fetch(url, {
     headers: {
@@ -169,6 +194,11 @@ async function fetchJson(url, token) {
   return response.json();
 }
 
+/**
+ * Busca tópicos com fallback entre versões de endpoint.
+ * @param {string} projectId Identificador do projeto.
+ * @param {string} token Access token da sessão do usuário.
+ */
 async function fetchTopics(projectId, token) {
   let lastError = null;
 
@@ -185,6 +215,10 @@ async function fetchTopics(projectId, token) {
   throw lastError || new Error("Nenhum endpoint de topicos respondeu com sucesso.");
 }
 
+/**
+ * Carrega tópicos de um projeto e publica o JSON bruto no painel.
+ * @param {string} projectId Identificador do projeto selecionado.
+ */
 async function loadTopicsForProject(projectId) {
   if (!projectId) {
     setTopicLoading("O projeto selecionado nao possui identificador valido.");
@@ -212,6 +246,9 @@ async function loadTopicsForProject(projectId) {
   );
 }
 
+/**
+ * Atualiza o cartão do projeto atual usando o contexto do Workspace API.
+ */
 async function loadCurrentProject() {
   try {
     const project =
@@ -236,6 +273,9 @@ async function loadCurrentProject() {
   }
 }
 
+/**
+ * Carrega usuário, projetos e tópicos iniciais usando o token concedido.
+ */
 async function loadUserAndProjects() {
   if (!accessToken) {
     throw new Error("A extensao ainda nao recebeu um access token.");
@@ -265,6 +305,9 @@ async function loadUserAndProjects() {
   showStatus("Dados carregados com sucesso a partir da sessao do Trimble Connect.", "success");
 }
 
+/**
+ * Solicita permissão de access token à extensão host do Trimble Connect.
+ */
 async function requestAccessToken() {
   setPermissionState("Solicitando consentimento");
   setTokenState("Pendente");
@@ -287,6 +330,13 @@ async function requestAccessToken() {
   setTokenState("Recebido");
 }
 
+/**
+ * Fluxo principal de inicialização:
+ * 1) conecta ao Workspace API;
+ * 2) registra listeners de eventos da extensão;
+ * 3) lê projeto atual;
+ * 4) solicita token e carrega dados.
+ */
 async function initializeExtension() {
   showStatus("Conectando ao Workspace API do Trimble Connect...", "info");
 

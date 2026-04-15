@@ -18,6 +18,25 @@ Este projeto foi convertido para uma extensao web do Trimble Connect usando o Wo
 - `styles.css`: visual da extensao
 - `manifest.json`: manifesto para instalar no Trimble Connect
 
+## Fluxo tecnico (documentacao do codigo)
+
+1. `initializeExtension()` conecta com `TrimbleConnectWorkspace.connect(...)`.
+2. `loadCurrentProject()` busca o projeto atual no contexto da aba/projeto aberto.
+3. `requestAccessToken()` solicita `accesstoken` via permissao da extensao.
+4. `loadUserAndProjects()` chama os endpoints REST de usuario e projetos.
+5. `renderProjectList()` monta a lista clicavel de projetos no painel.
+6. `loadTopicsForProject()` e `fetchTopics()` carregam topicos via BCF com fallback (`3.0` -> `2.1`).
+7. `renderTopicList()` desenha os topicos e atualiza o contador na UI.
+
+### Estrategia de normalizacao
+
+Como os payloads podem variar por endpoint/versao, o codigo aplica normalizacao antes de renderizar:
+
+- `normalizeProjects(payload)`: aceita `data`, `items`, `projects`, `results` ou array puro.
+- `normalizeTopics(payload)`: aceita `data`, `items`, `topics`, `results` ou array puro.
+
+Assim a UI trabalha sempre com um formato interno consistente, mesmo quando os campos mudam entre APIs.
+
 ## Instalacao
 
 1. Hospede estes arquivos em HTTPS.
