@@ -1,35 +1,20 @@
-const statusMessage = document.getElementById("statusMessage");
+﻿const statusMessage = document.getElementById("statusMessage");
 const projectList = document.getElementById("projectList");
 const rawOutput = document.getElementById("rawOutput");
 const refreshButton = document.getElementById("refreshButton");
 const currentProjectName = document.getElementById("currentProjectName");
 const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
-const projectList = document.getElementById("projectList");
 const topicCount = document.getElementById("topicCount");
 const topicList = document.getElementById("topicList");
-const rawOutput = document.getElementById("rawOutput");
+const userName = document.getElementById("userName");
+const userEmail = document.getElementById("userEmail");
+const permissionState = document.getElementById("permissionState");
 
 let workspaceApi;
 let accessToken = "";
 let selectedProjectId = "";
 let projects = [];
-
-function setStatus(message) {
-let currentProjectId = "";
-
-function buildBcfTopicEndpointCandidates(projectId) {
-  const encodedProjectId = encodeURIComponent(projectId);
-  const pathV30 = `/bcf/3.0/projects/${encodedProjectId}/topics`;
-  const pathV21 = `/bcf/2.1/projects/${encodedProjectId}/topics`;
-  const host = "https://app.connect.trimble.com";
-
-  return [
-    { version: "3.0", url: `${host}${pathV30}` },
-    { version: "3.0", url: `${host}${pathV30}?includeAuthorization=true` },
-    { version: "2.1", url: `${host}${pathV21}` },
-    { version: "2.1", url: `${host}${pathV21}?includeAuthorization=true` },
-  ];
 let currentProjectId = "";
 
 const TOPICS_REGION_HOSTS = {
@@ -38,6 +23,31 @@ const TOPICS_REGION_HOSTS = {
   asiapacific: "https://open31.connect.trimble.com",
   australia: "https://open32.connect.trimble.com",
 };
+
+function setStatus(message, type = "info") {
+  statusMessage.textContent = message;
+  statusMessage.className = `status-message ${type}`;
+}
+
+function setJson(data) {
+  rawOutput.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function normalizeProjectLocation(location) {
+  return String(location || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function prioritizeTopicHostsByProject(projectRaw) {
+  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
+  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  if (!prioritizedHost) {
+    return allHosts;
+  }
+
+  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
+}
 
 function buildBcfTopicEndpointCandidates(projectId) {
   const encodedProjectId = encodeURIComponent(projectId);
@@ -49,65 +59,6 @@ function buildBcfTopicEndpointCandidates(projectId) {
     { version: "3.0", url: `${host}${bcf3Path}` },
     { version: "2.1", url: `${host}${bcf21Path}` },
   ]);
-}
-
-function normalizeProjectLocation(location) {
-  return String(location || "")
-    .toLowerCase()
-    .replace(/[^a-z]/g, "");
-}
-
-function prioritizeTopicHostsByProject(projectRaw) {
-  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
-  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  if (!prioritizedHost) {
-    return allHosts;
-  }
-
-function prioritizeTopicHostsByProject(projectRaw) {
-  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
-  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  if (!prioritizedHost) {
-    return allHosts;
-  }
-
-  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
-}
-
-function showStatus(message, type = "info") {
-  statusMessage.textContent = message;
-  statusMessage.className = `status-message ${type}`;
-
-}
-
-function normalizeProjectLocation(location) {
-  return String(location || "")
-    .toLowerCase()
-    .replace(/[^a-z]/g, "");
-}
-
-function prioritizeTopicHostsByProject(projectRaw) {
-  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
-  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  if (!prioritizedHost) {
-    return allHosts;
-  }
-
-  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
-}
-
-function showStatus(message, type = "info") {
-  statusMessage.textContent = message;
-}
-
-function setJson(data) {
-  rawOutput.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
 function normalizeProjects(payload) {
@@ -167,6 +118,7 @@ function renderProjects() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "item";
+
     if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
       selectedProjectId = project.id;
       button.classList.add("active");
@@ -206,6 +158,7 @@ function renderTopics(items) {
   items.forEach((topic) => {
     const article = document.createElement("article");
     article.className = "item";
+
     const title = document.createElement("span");
     title.className = "title";
     title.textContent = topic.title;
@@ -219,29 +172,7 @@ function renderTopics(items) {
   });
 }
 
-async function loadTopics(project) {
-  if (!project?.id || !accessToken) {
-
-async function fetchBcfTopics(projectId, token) {
-  const errors = [];
-  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
-
-
-async function fetchBcfTopics(projectId, token) {
-  const errors = [];
-  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
-
-async function fetchBcfTopics(projectId, token) {
-  const errors = [];
-  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId);
-
-  for (const endpoint of endpointCandidates) {
-    try {
-      const payload = await fetchJson(endpoint.url, token, {
-        "Content-Type": "application/json",
-      });
-
-async function fetchBcfTopics(projectId, token, projectRaw) {
+async function fetchBcfTopics(projectId, token, projectRaw = {}) {
   const errors = [];
   const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
   const endpointCandidates = buildBcfTopicEndpointCandidates(projectId).sort((a, b) => {
@@ -253,20 +184,6 @@ async function fetchBcfTopics(projectId, token, projectRaw) {
   for (const endpoint of endpointCandidates) {
     try {
       const payload = await fetchJson(endpoint.url, token);
-
-async function fetchBcfTopics(projectId, token, projectRaw) {
-  const errors = [];
-  const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
-  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId).sort((a, b) => {
-    const hostA = orderedHosts.indexOf(new URL(a.url).origin);
-    const hostB = orderedHosts.indexOf(new URL(b.url).origin);
-    return hostA - hostB;
-  });
-
-  for (const endpoint of endpointCandidates) {
-    try {
-      const payload = await fetchJson(endpoint.url, token);
-
       return {
         payload,
         endpoint,
@@ -286,85 +203,57 @@ async function fetchBcfTopics(projectId, token, projectRaw) {
   throw new Error(`Nenhum endpoint BCF retornou topicos. Tentativas: ${message}`);
 }
 
-async function loadTopicsForProject(project) {
-  const projectId = typeof project === "string" ? project : project?.id || project?.projectId || "";
-  const projectRaw = typeof project === "string" ? null : project?.raw || project;
+async function loadTopics(project) {
+  if (!project?.id) {
+    setStatus("Projeto selecionado invalido.", "error");
+    renderTopics([]);
+    topicCount.textContent = "0";
+    return;
+  }
 
-  if (!projectId) {
-    setTopicLoading("O projeto selecionado nao possui identificador valido.");
-
+  if (!accessToken) {
+    setStatus("Token de acesso nao disponivel.", "error");
+    renderTopics([]);
+    topicCount.textContent = "0";
     return;
   }
 
   setStatus("Carregando topicos...");
   topicList.innerHTML = '<p class="empty">Carregando...</p>';
 
-
   try {
-    const payload = await fetchJson(
-      `/api/projects/${encodeURIComponent(project.id)}/topics?location=${encodeURIComponent(project.location)}`,
-      accessToken
-    );
-    const topics = normalizeTopics(payload);
+    const topicsResponse = await fetchBcfTopics(project.id, accessToken, project.raw || project);
+    const topics = normalizeTopics(topicsResponse.payload);
+
     renderTopics(topics);
-    setJson({ projectId: project.id, topics, raw: payload });
+    setJson({
+      projectId: project.id,
+      bcfEndpoint: topicsResponse.endpoint,
+      topics,
+      raw: topicsResponse.payload,
+    });
     setStatus("Topicos carregados.");
   } catch (error) {
-    topicList.innerHTML = `<p class="empty">${error.message}</p>`;
-    topicCount.textContent = "0";
-    setJson({ projectId: project.id, projectRaw: project.raw, error: error.message });
-    setStatus("Falha ao carregar topicos.");
-
-  setTopicLoading("Carregando topicos do projeto selecionado...");
-  try {
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken);
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
-
-    const topicsResponse = await fetchBcfTopics(projectId, accessToken, projectRaw);
-
-    const topicsPayload = topicsResponse.payload;
-    const topics = normalizeTopics(topicsPayload);
-
-    renderTopicList(topics);
+    renderTopics([]);
     rawOutput.textContent = JSON.stringify(
       {
-        projectId,
-        projectRaw,
-        bcfEndpoint: topicsResponse.endpoint,
-        topics,
-        raw: topicsPayload,
-      },
-      null,
-      2
-    );
-  } catch (error) {
-    renderTopicList([]);
-    rawOutput.textContent = JSON.stringify(
-      {
-        projectId,
-        projectRaw,
+        projectId: project.id,
+        projectRaw: project.raw || project,
         error: error.message,
       },
       null,
       2
     );
-    throw error;
+    setStatus("Falha ao carregar topicos.", "error");
   }
 }
 
 async function loadCurrentProject() {
+  if (!workspaceApi?.project) {
+    setStatus("Workspace API do projeto nao disponivel.", "error");
+    return;
+  }
+
   try {
     const project =
       (await workspaceApi.project.getCurrentProject?.()) ||
@@ -372,59 +261,62 @@ async function loadCurrentProject() {
 
     if (!project) {
       currentProjectName.textContent = "Projeto nao encontrado";
-
       currentProjectMeta.textContent = "Abra a extensao dentro de um projeto.";
-      return;
-    }
-
-    currentProjectName.textContent = project.name || project.projectName || "Projeto atual";
-    currentProjectMeta.textContent = [project.id, project.number].filter(Boolean).join(" | ");
-  } catch (error) {
-    currentProjectName.textContent = "Falha ao ler projeto";
-
-      currentProjectMeta.textContent =
-        "A extensao precisa ser aberta dentro do contexto de um projeto.";
       currentProjectId = "";
       return;
     }
 
     currentProjectId = project.id || project.projectId || "";
-    currentProjectName.textContent =
-      project.name || project.projectName || "Projeto atual";
-    currentProjectMeta.textContent = [project.id, project.number]
-      .filter(Boolean)
-      .join(" | ");
-  } try{}catch (error) {
+    currentProjectName.textContent = project.name || project.projectName || "Projeto atual";
+    currentProjectMeta.textContent = [project.id, project.number].filter(Boolean).join(" | ");
+  } catch (error) {
     currentProjectId = "";
     currentProjectName.textContent = "Falha ao ler o projeto atual";
-
     currentProjectMeta.textContent = error.message;
+    setStatus("Nao foi possivel obter o projeto atual.", "error");
   }
 }
 
 async function requestAccessToken() {
+  if (!workspaceApi?.extension?.requestPermission) {
+    throw new Error("Workspace API de extensao nao disponivel.");
+  }
+
   const result = await workspaceApi.extension.requestPermission("accesstoken");
 
   if (result === "pending") {
+    permissionState.textContent = "Pendente";
     setStatus("Aguardando permissao do usuario.");
     return;
   }
 
   if (result === "denied") {
+    permissionState.textContent = "Negado";
     throw new Error("Permissao do token negada.");
   }
 
-  accessToken = result;
+  accessToken = String(result);
+  permissionState.textContent = "Concedido";
+  setStatus("Token recebido.");
 }
 
 async function loadProjects() {
+  if (!accessToken) {
+    throw new Error("Token de acesso nao disponivel.");
+  }
+
   setStatus("Carregando projetos...");
 
-  const payload = await fetchJson("https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false", accessToken);
+  const payload = await fetchJson(
+    "https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false",
+    accessToken
+  );
+
   projects = normalizeProjects(payload);
   renderProjects();
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
+
   if (selectedProject) {
     setJson(selectedProject.raw);
     await loadTopics(selectedProject);
@@ -432,11 +324,16 @@ async function loadProjects() {
     topicList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
     topicCount.textContent = "0";
     setJson("Sem dados.");
-    setStatus("Nenhum projeto encontrado.");
+    setStatus("Nenhum projeto encontrado.", "error");
   }
 }
 
 async function initialize() {
+  if (!window.TrimbleConnectWorkspace?.connect) {
+    setStatus("Workspace API indisponivel.", "error");
+    return;
+  }
+
   workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
     if (event === "extension.accessToken" && typeof args?.data === "string") {
       accessToken = args.data;
@@ -460,11 +357,12 @@ refreshButton.addEventListener("click", async () => {
     if (!accessToken) {
       await requestAccessToken();
     }
+
     if (accessToken) {
       await loadProjects();
     }
   } catch (error) {
-    setStatus(error.message);
+    setStatus(error.message, "error");
     setJson(error.stack || error.message);
   } finally {
     refreshButton.disabled = false;
@@ -472,6 +370,6 @@ refreshButton.addEventListener("click", async () => {
 });
 
 initialize().catch((error) => {
-  setStatus(error.message);
+  setStatus(error.message, "error");
   setJson(error.stack || error.message);
 });
