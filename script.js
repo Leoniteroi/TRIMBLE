@@ -2,6 +2,7 @@
 const projectList = document.getElementById("projectList");
 const rawOutput = document.getElementById("rawOutput");
 const refreshButton = document.getElementById("refreshButton");
+const showJsonButton = document.getElementById("showJsonButton");
 const currentProjectName = document.getElementById("currentProjectName");
 const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
