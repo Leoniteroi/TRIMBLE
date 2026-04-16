@@ -3,6 +3,7 @@ const projectList = document.getElementById("projectList");
 const rawOutput = document.getElementById("rawOutput");
 const refreshButton = document.getElementById("refreshButton");
 const showJsonButton = document.getElementById("showJsonButton");
+const toggleTopicsButton = document.getElementById("toggleTopicsButton");
 const currentProjectName = document.getElementById("currentProjectName");
 const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
@@ -18,6 +19,7 @@ let selectedProjectId = "";
 let projects = [];
 let currentProjectId = "";
 let selectedJsonData = null;
+let selectedTopicsData = [];
 
 const TOPICS_REGION_HOSTS = {
   northamerica: "https://open11.connect.trimble.com",
@@ -36,6 +38,13 @@ function setJson(data) {
   showJsonButton.disabled = data == null;
   showJsonButton.textContent = "Exibir JSON";
   rawOutput.hidden = true;
+}
+
+function setTopicsData(items) {
+  selectedTopicsData = Array.isArray(items) ? items : [];
+  toggleTopicsButton.disabled = selectedTopicsData.length === 0;
+  toggleTopicsButton.textContent = "Exibir topicos";
+  topicList.hidden = true;
 }
 
 function normalizeProjectLocation(location) {
@@ -154,6 +163,7 @@ function renderProjects() {
 function renderTopics(items) {
   topicList.innerHTML = "";
   topicCount.textContent = String(items.length);
+  setTopicsData(items);
 
   if (!items.length) {
     topicList.innerHTML = '<p class="empty">Nenhum topico encontrado.</p>';
@@ -211,6 +221,7 @@ async function fetchBcfTopics(projectId, token, projectRaw = {}) {
 async function loadTopics(project) {
   if (!project?.id) {
     setStatus("Projeto selecionado invalido.", "error");
+    setTopicsData([]);
     renderTopics([]);
     topicCount.textContent = "0";
     return;
@@ -218,12 +229,14 @@ async function loadTopics(project) {
 
   if (!accessToken) {
     setStatus("Token de acesso nao disponivel.", "error");
+    setTopicsData([]);
     renderTopics([]);
     topicCount.textContent = "0";
     return;
   }
 
   setStatus("Carregando topicos...");
+  setTopicsData([]);
   topicList.innerHTML = '<p class="empty">Carregando...</p>';
 
   try {
@@ -237,8 +250,9 @@ async function loadTopics(project) {
       topics,
       raw: topicsResponse.payload,
     });
-    setStatus("Topicos carregados.");
+    setStatus("Topicos carregados. Clique em Exibir topicos para ver a listagem.");
   } catch (error) {
+    setTopicsData([]);
     renderTopics([]);
     setJson({
       projectId: project.id,
@@ -323,6 +337,7 @@ async function loadProjects() {
     await loadTopics(selectedProject);
   } else {
     topicList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
+    setTopicsData([]);
     topicCount.textContent = "0";
     setJson("Sem dados.");
     setStatus("Nenhum projeto encontrado.", "error");
@@ -388,6 +403,22 @@ showJsonButton.addEventListener("click", () => {
       : JSON.stringify(selectedJsonData, null, 2);
   rawOutput.hidden = false;
   showJsonButton.textContent = "Ocultar JSON";
+});
+
+toggleTopicsButton.addEventListener("click", () => {
+  if (!selectedTopicsData.length) {
+    setStatus("Nenhum topico carregado.", "error");
+    return;
+  }
+
+  if (!topicList.hidden) {
+    topicList.hidden = true;
+    toggleTopicsButton.textContent = "Exibir topicos";
+    return;
+  }
+
+  topicList.hidden = false;
+  toggleTopicsButton.textContent = "Ocultar topicos";
 });
 
 initialize().catch((error) => {
