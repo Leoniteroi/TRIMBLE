@@ -142,11 +142,7 @@ function renderProjects() {
     title.className = "title";
     title.textContent = project.name;
 
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = [project.number, project.id].filter(Boolean).join(" | ");
-
-    button.append(title, meta);
+    button.append(title);
     button.addEventListener("click", async () => {
       selectedProjectId = project.id;
       document.querySelectorAll("#projectList .item").forEach((item) => {
