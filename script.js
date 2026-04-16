@@ -1,70 +1,81 @@
-const statusMessage = document.getElementById("statusMessage");
+﻿const statusMessage = document.getElementById("statusMessage");
+const projectList = document.getElementById("projectList");
+const rawOutput = document.getElementById("rawOutput");
 const refreshButton = document.getElementById("refreshButton");
+const showJsonButton = document.getElementById("showJsonButton");
+const toggleTopicsButton = document.getElementById("toggleTopicsButton");
+const exportTopicsButton = document.getElementById("exportTopicsButton");
 const currentProjectName = document.getElementById("currentProjectName");
 const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
-const projectList = document.getElementById("projectList");
 const topicCount = document.getElementById("topicCount");
-const topicSummary = document.getElementById("topicSummary");
 const topicList = document.getElementById("topicList");
-const jsonHint = document.getElementById("jsonHint");
-const jsonToggleButton = document.getElementById("jsonToggleButton");
-const jsonPanel = document.getElementById("jsonPanel");
-const rawOutput = document.getElementById("rawOutput");
-
-const PROJECTS_URL = "https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false";
+const userName = document.getElementById("userName");
+const userEmail = document.getElementById("userEmail");
+const permissionState = document.getElementById("permissionState");
 
 let workspaceApi;
 let accessToken = "";
-let currentProjectId = "";
 let selectedProjectId = "";
-let selectedTopicId = "";
 let projects = [];
-let currentTopics = [];
-let topicRequestId = 0;
-let projectLoadPromise = null;
-let currentJsonText = "Sem dados.";
-let currentJsonLabel = "resultado atual";
+let currentProjectId = "";
+let selectedJsonData = null;
+let selectedTopicsData = [];
 
-function setStatus(message) {
+const TOPICS_REGION_HOSTS = {
+  northamerica: "https://open11.connect.trimble.com",
+  europe: "https://open21.connect.trimble.com",
+  asiapacific: "https://open31.connect.trimble.com",
+  australia: "https://open32.connect.trimble.com",
+};
+const COMPLETED_TOPIC_STATUS_KEYS = new Set(["resolved", "done", "closed"]);
+
+function setStatus(message, type = "info") {
   statusMessage.textContent = message;
+  statusMessage.className = `status-message ${type}`;
 }
 
-function setJsonVisibility(visible) {
-  jsonPanel.hidden = !visible;
-  jsonToggleButton.setAttribute("aria-expanded", String(visible));
-  jsonToggleButton.textContent = visible ? "Ocultar JSON" : "Exibir JSON do resultado";
-  jsonHint.textContent = visible
-    ? `Exibindo o JSON bruto de ${currentJsonLabel}.`
-    : `JSON pronto para consulta: ${currentJsonLabel}.`;
+function setJson(data) {
+  selectedJsonData = data;
+  showJsonButton.disabled = data == null;
+  showJsonButton.textContent = "Exibir JSON";
+  rawOutput.hidden = true;
 }
 
-function setJson(data, label = "resultado atual") {
-  currentJsonLabel = label;
-  currentJsonText = typeof data === "string" ? data : JSON.stringify(data, null, 2);
-  rawOutput.textContent = currentJsonText;
-  jsonToggleButton.disabled = !currentJsonText.trim();
-  setJsonVisibility(!jsonPanel.hidden);
+function setTopicsData(items) {
+  selectedTopicsData = Array.isArray(items) ? items : [];
+  toggleTopicsButton.disabled = selectedTopicsData.length === 0;
+  exportTopicsButton.disabled = selectedTopicsData.length === 0;
+  toggleTopicsButton.textContent = "Exibir topicos";
+  topicList.hidden = true;
 }
 
-function setListMessage(container, message) {
-  container.innerHTML = "";
-  const paragraph = document.createElement("p");
-  paragraph.className = "empty";
-  paragraph.textContent = message;
-  container.appendChild(paragraph);
+function normalizeProjectLocation(location) {
+  return String(location || "").toLowerCase().replace(/[^a-z]/g, "");
 }
 
-function formatErrorMessage(errorPayload) {
-  if (typeof errorPayload === "string" && errorPayload.trim()) {
-    return errorPayload;
+function prioritizeTopicHostsByProject(projectRaw) {
+  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
+  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  if (!prioritizedHost) {
+    return allHosts;
   }
 
-  if (errorPayload && typeof errorPayload === "object") {
-    return JSON.stringify(errorPayload);
-  }
+  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
+}
 
-  return "Falha ao carregar os dados.";
+function buildBcfTopicEndpointCandidates(projectId) {
+  const encodedProjectId = encodeURIComponent(projectId);
+  const bcf3Path = `/bcf/3.0/projects/${encodedProjectId}/topics`;
+  const bcf21Path = `/bcf/2.1/projects/${encodedProjectId}/topics?top=500`;
+  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+
+  return allHosts.flatMap((host) => [
+    { version: "3.0", url: `${host}${bcf3Path}` },
+    { version: "2.1", url: `${host}${bcf21Path}` },
+  ]);
 }
 
 function normalizeProjects(payload) {
@@ -76,7 +87,7 @@ function normalizeProjects(payload) {
     id: project.id || project.projectId || project.identifier || "",
     name: project.name || project.projectName || "Projeto sem nome",
     number: project.number || project.projectNumber || project.externalId || "",
-    location: project.location || project.region || project.projectLocation || "",
+    location: project.location || "",
     raw: project,
   }));
 }
@@ -86,80 +97,23 @@ function normalizeTopics(payload) {
     ? payload
     : payload?.data || payload?.items || payload?.topics || payload?.results || [];
 
-  return items.map((topic) => {
-    const labels = Array.isArray(topic.labels)
-      ? topic.labels
-      : typeof topic.labels === "string" && topic.labels.trim()
-        ? [topic.labels]
-        : [];
-
-    return {
-      id: topic.topic_id || topic.id || topic.guid || "",
-      code: topic.server_assigned_id || topic.topic_id || topic.guid || topic.id || "-",
-      title: topic.title || topic.topic_title || topic.description || "Topico sem titulo",
-      description: topic.description || "",
-      status: topic.topic_status || topic.status || "-",
-      type: topic.topic_type || topic.type || "-",
-      priority: topic.priority || "-",
-      assignedTo: topic.assigned_to || topic.modified_author || topic.creation_author || "-",
-      createdAt: topic.creation_date || "",
-      updatedAt: topic.modified_date || "",
-      dueDate: topic.due_date || "",
-      labels,
-      meta: [topic.topic_status || topic.status, topic.topic_type || topic.type, topic.guid || topic.id]
-        .filter(Boolean)
-        .join(" | "),
-      raw: topic,
-    };
-  });
+  return items.map((topic) => ({
+    id: topic.topic_id || topic.id || topic.guid || "",
+    code: topic.server_assigned_id || topic.topic_id || topic.id || topic.guid || "-",
+    title: topic.title || topic.topic_title || topic.description || "Topico sem titulo",
+    status: topic.topic_status || topic.status || "-",
+    type: topic.topic_type || topic.type || "-",
+    priority: topic.priority || "-",
+    dueDate: topic.due_date || "",
+    labels: Array.isArray(topic.labels) ? topic.labels : [],
+    owner: topic.assigned_to || topic.creation_author || "-",
+    createdBy: topic.creation_author || "-",
+    updatedAt: topic.modified_date || topic.creation_date || "",
+    raw: topic,
+  }));
 }
 
-async function fetchJson(url, token) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-
-  const bodyText = await response.text();
-  let payload = [];
-
-  if (bodyText.trim()) {
-    try {
-      payload = JSON.parse(bodyText);
-    } catch {
-      payload = bodyText;
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${formatErrorMessage(payload)}`);
-  }
-
-  return payload;
-}
-
-function normalizeToken(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function isClosedStatus(status) {
-  const normalized = normalizeToken(status);
-  return ["closed", "done", "resolved"].includes(normalized);
-}
-
-function isCriticalPriority(priority) {
-  const normalized = normalizeToken(priority);
-  return ["critical", "prioridade-altissima", "prioridade-alta"].includes(normalized);
-}
-
-function formatDate(value, options = { dateStyle: "short" }) {
+function formatTopicDate(value) {
   if (!value) {
     return "-";
   }
@@ -169,156 +123,184 @@ function formatDate(value, options = { dateStyle: "short" }) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("pt-BR", options).format(date);
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
 }
 
-function truncateText(value, maxLength = 140) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
-  if (!text) {
-    return "Sem descricao.";
-  }
-
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
+function slugifyTopicValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-function createPill(value, tone) {
-  const pill = document.createElement("span");
-  pill.className = "pill";
-  pill.textContent = value || "-";
-
-  const normalized = normalizeToken(value);
-
-  if (tone === "status") {
-    if (isClosedStatus(normalized)) {
-      pill.classList.add("pill-success");
-    } else if (["in-progress", "active", "waiting"].includes(normalized)) {
-      pill.classList.add("pill-warning");
-    } else {
-      pill.classList.add("pill-info");
-    }
-  } else if (tone === "priority") {
-    if (isCriticalPriority(normalized)) {
-      pill.classList.add("pill-danger");
-    } else if (["high", "prioridade-media"].includes(normalized)) {
-      pill.classList.add("pill-warning");
-    } else {
-      pill.classList.add("pill-muted");
-    }
-  } else {
-    pill.classList.add("pill-muted");
-  }
-
-  return pill;
+function getTopicStatusKey(value) {
+  return slugifyTopicValue(value);
 }
 
-function createCellText(primary, secondary = "") {
-  const wrapper = document.createElement("div");
-  wrapper.className = "cell-main";
-
-  const title = document.createElement("span");
-  title.className = "cell-title";
-  title.textContent = primary || "-";
-  wrapper.appendChild(title);
-
-  if (secondary) {
-    const subtitle = document.createElement("span");
-    subtitle.className = "cell-subtitle";
-    subtitle.textContent = secondary;
-    wrapper.appendChild(subtitle);
+function getTopicDueDateOrder(value) {
+  if (!value) {
+    return Number.MAX_SAFE_INTEGER;
   }
 
-  return wrapper;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? Number.MAX_SAFE_INTEGER : date.getTime();
 }
 
-function updateTopicSummary(items) {
-  if (!items.length) {
-    topicSummary.textContent = "Nenhum topico encontrado para este projeto.";
-    return;
-  }
+function sortTopicsByDueDate(items) {
+  return [...items].sort((a, b) => {
+    const dueDateDiff = getTopicDueDateOrder(a.dueDate) - getTopicDueDateOrder(b.dueDate);
 
-  const openCount = items.filter((topic) => !isClosedStatus(topic.status)).length;
-  const criticalCount = items.filter((topic) => isCriticalPriority(topic.priority)).length;
-  const overdueCount = items.filter((topic) => {
-    if (!topic.dueDate || isClosedStatus(topic.status)) {
-      return false;
+    if (dueDateDiff !== 0) {
+      return dueDateDiff;
     }
 
-    const dueDate = new Date(topic.dueDate);
-    if (Number.isNaN(dueDate.getTime())) {
-      return false;
-    }
-
-    return dueDate.getTime() < Date.now();
-  }).length;
-
-  topicSummary.textContent =
-    `${items.length} topicos no total • ${openCount} abertos/em andamento • ` +
-    `${criticalCount} criticos/alta prioridade • ${overdueCount} vencidos`;
-}
-
-function renderProjects() {
-  projectList.innerHTML = "";
-  projectCount.textContent = String(projects.length);
-
-  if (!projects.length) {
-    setListMessage(projectList, "Nenhum projeto encontrado.");
-    return;
-  }
-
-  projects.forEach((project) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "item";
-    button.classList.toggle("active", project.id === selectedProjectId);
-
-    const title = document.createElement("span");
-    title.className = "title";
-    title.textContent = project.name;
-
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = [project.number, project.id].filter(Boolean).join(" | ") || "Sem identificador";
-
-    button.append(title, meta);
-    button.addEventListener("click", async () => {
-      selectedProjectId = project.id;
-      selectedTopicId = "";
-      renderProjects();
-      setJson(project.raw, `projeto ${project.name}`);
-      await loadTopics(project);
-    });
-
-    projectList.appendChild(button);
+    return a.title.localeCompare(b.title, "pt-BR");
   });
 }
 
-function renderTopics(items) {
-  topicList.innerHTML = "";
-  topicCount.textContent = String(items.length);
-  updateTopicSummary(items);
+function splitTopicsByCompletion(items) {
+  const sortedTopics = sortTopicsByDueDate(items);
 
-  if (!items.length) {
-    setListMessage(topicList, "Nenhum topico encontrado.");
+  return {
+    activeTopics: sortedTopics.filter(
+      (topic) => !COMPLETED_TOPIC_STATUS_KEYS.has(getTopicStatusKey(topic.status))
+    ),
+    completedTopics: sortedTopics.filter((topic) =>
+      COMPLETED_TOPIC_STATUS_KEYS.has(getTopicStatusKey(topic.status))
+    ),
+  };
+}
+
+function escapeSpreadsheetXml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function sanitizeWorksheetName(value) {
+  return String(value)
+    .replace(/[\\/*?:[\]]/g, "")
+    .slice(0, 31);
+}
+
+function buildExcelWorksheetXml(name, items) {
+  const columns = [
+    "Codigo",
+    "Titulo",
+    "Status",
+    "Tipo",
+    "Prioridade",
+    "Vencimento",
+    "Etiquetas",
+    "Responsavel",
+  ];
+  const rows = items.map((topic) => [
+    topic.code,
+    topic.title,
+    topic.status,
+    topic.type,
+    topic.priority,
+    formatTopicDate(topic.dueDate),
+    topic.labels.join(", "),
+    topic.owner,
+  ]);
+
+  const headerXml = `<Row ss:StyleID="header">${columns
+    .map((column) => `<Cell><Data ss:Type="String">${escapeSpreadsheetXml(column)}</Data></Cell>`)
+    .join("")}</Row>`;
+  const rowsXml = rows
+    .map(
+      (row) =>
+        `<Row>${row
+          .map((cell) => `<Cell><Data ss:Type="String">${escapeSpreadsheetXml(cell)}</Data></Cell>`)
+          .join("")}</Row>`
+    )
+    .join("");
+
+  return `<Worksheet ss:Name="${escapeSpreadsheetXml(sanitizeWorksheetName(name))}"><Table>${headerXml}${rowsXml}</Table></Worksheet>`;
+}
+
+function exportTopicsToExcel() {
+  if (!selectedTopicsData.length) {
+    setStatus("Nenhum topico carregado para exportar.", "error");
     return;
   }
 
-  const wrapper = document.createElement("div");
-  wrapper.className = "table-wrap";
+  const { activeTopics, completedTopics } = splitTopicsByCompletion(selectedTopicsData);
+  const workbookXml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1"/>
+   <Interior ss:Color="#EEF7FF" ss:Pattern="Solid"/>
+  </Style>
+ </Styles>
+ ${buildExcelWorksheetXml("Topicos em andamento", activeTopics)}
+ ${buildExcelWorksheetXml("Topicos concluidos", completedTopics)}
+</Workbook>`;
+  const blob = new Blob([workbookXml], { type: "application/vnd.ms-excel" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const fileDate = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `topicos-${selectedProjectId || "projeto"}-${fileDate}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  setStatus("Tabelas exportadas para Excel.");
+}
+
+function buildTopicsTable(title, items) {
+  const section = document.createElement("section");
+  section.className = "topic-table-section";
+
+  const heading = document.createElement("h3");
+  heading.className = "topic-table-heading";
+  heading.textContent = `${title} (${items.length})`;
+  section.appendChild(heading);
+
+  if (!items.length) {
+    const emptyState = document.createElement("p");
+    emptyState.className = "empty-state";
+    emptyState.textContent = "Nenhum topico nesta secao.";
+    section.appendChild(emptyState);
+    return section;
+  }
+
+  const tableWrapper = document.createElement("div");
+  tableWrapper.className = "topic-table-wrapper";
 
   const table = document.createElement("table");
   table.className = "topic-table";
+  table.setAttribute("aria-label", title);
 
   const thead = document.createElement("thead");
   const headerRow = document.createElement("tr");
   [
     "Codigo",
-    "Topico",
+    "Titulo",
     "Status",
     "Tipo",
     "Prioridade",
+    "Vencimento",
     "Etiquetas",
     "Responsavel",
-    "Datas",
   ].forEach((label) => {
     const th = document.createElement("th");
     th.scope = "col";
@@ -331,283 +313,391 @@ function renderTopics(items) {
 
   items.forEach((topic) => {
     const row = document.createElement("tr");
-    row.className = "topic-row";
-    row.classList.toggle("active", topic.id === selectedTopicId);
-    row.tabIndex = 0;
-
-    row.addEventListener("click", () => {
-      selectedTopicId = topic.id;
-      setJson(topic.raw, `topico ${topic.code}`);
-      renderTopics(currentTopics);
-    });
-
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        row.click();
-      }
-    });
 
     const codeCell = document.createElement("td");
-    const code = document.createElement("span");
-    code.className = "mono";
-    code.textContent = topic.code;
-    codeCell.appendChild(code);
+    codeCell.className = "topic-code";
+    codeCell.textContent = topic.code;
 
     const titleCell = document.createElement("td");
-    titleCell.appendChild(createCellText(topic.title, truncateText(topic.description)));
+    const titleBlock = document.createElement("div");
+    titleBlock.className = "topic-title-cell";
+
+    const titleText = document.createElement("strong");
+    titleText.className = "topic-main-title";
+    titleText.textContent = topic.title;
+
+    const subtitleText = document.createElement("span");
+    subtitleText.className = "topic-subtitle";
+    subtitleText.textContent = `${topic.id} | Atualizado em ${formatTopicDate(topic.updatedAt)}`;
+
+    titleBlock.append(titleText, subtitleText);
+    titleCell.appendChild(titleBlock);
 
     const statusCell = document.createElement("td");
-    statusCell.appendChild(createPill(topic.status, "status"));
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `topic-badge status-${slugifyTopicValue(topic.status)}`;
+    statusBadge.textContent = topic.status;
+    statusCell.appendChild(statusBadge);
 
     const typeCell = document.createElement("td");
-    typeCell.appendChild(createPill(topic.type, "type"));
+    typeCell.textContent = topic.type;
 
     const priorityCell = document.createElement("td");
-    priorityCell.appendChild(createPill(topic.priority, "priority"));
+    const priorityBadge = document.createElement("span");
+    priorityBadge.className = `topic-badge priority-${slugifyTopicValue(topic.priority)}`;
+    priorityBadge.textContent = topic.priority;
+    priorityCell.appendChild(priorityBadge);
+
+    const dueDateCell = document.createElement("td");
+    dueDateCell.textContent = formatTopicDate(topic.dueDate);
 
     const labelsCell = document.createElement("td");
     if (topic.labels.length) {
-      const labelGroup = document.createElement("div");
-      labelGroup.className = "label-group";
+      const labelsGroup = document.createElement("div");
+      labelsGroup.className = "topic-labels";
+
       topic.labels.forEach((label) => {
-        const chip = document.createElement("span");
-        chip.className = "label-chip";
-        chip.textContent = label;
-        labelGroup.appendChild(chip);
+        const pill = document.createElement("span");
+        pill.className = "topic-label-pill";
+        pill.textContent = label;
+        labelsGroup.appendChild(pill);
       });
-      labelsCell.appendChild(labelGroup);
+
+      labelsCell.appendChild(labelsGroup);
     } else {
-      labelsCell.appendChild(createCellText("-", ""));
+      labelsCell.textContent = "-";
     }
 
     const ownerCell = document.createElement("td");
-    ownerCell.appendChild(createCellText(topic.assignedTo, topic.meta));
+    ownerCell.textContent = topic.owner;
 
-    const datesCell = document.createElement("td");
-    datesCell.appendChild(
-      createCellText(
-        `Venc.: ${formatDate(topic.dueDate)}`,
-        `Atual.: ${formatDate(topic.updatedAt, { dateStyle: "short", timeStyle: "short" })}`
-      )
+    row.append(
+      codeCell,
+      titleCell,
+      statusCell,
+      typeCell,
+      priorityCell,
+      dueDateCell,
+      labelsCell,
+      ownerCell
     );
-
-    row.append(codeCell, titleCell, statusCell, typeCell, priorityCell, labelsCell, ownerCell, datesCell);
     tbody.appendChild(row);
   });
 
   table.append(thead, tbody);
-  wrapper.appendChild(table);
-  topicList.appendChild(wrapper);
+  tableWrapper.appendChild(table);
+  section.appendChild(tableWrapper);
+
+  return section;
 }
 
-async function loadTopics(project) {
-  if (!project?.id || !accessToken) {
-    currentTopics = [];
-    setListMessage(topicList, "Selecione um projeto valido.");
-    topicCount.textContent = "0";
-    topicSummary.textContent = "Nao ha dados para exibir.";
+async function fetchJson(url, token) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json();
+}
+
+function renderProjects() {
+  projectList.innerHTML = "";
+  projectCount.textContent = String(projects.length);
+
+  if (!projects.length) {
+    projectList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
     return;
   }
 
-  const requestId = ++topicRequestId;
+  projects.forEach((project, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "item";
+
+    if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
+      selectedProjectId = project.id;
+      button.classList.add("active");
+    }
+
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = project.name;
+
+    button.append(title);
+    button.addEventListener("click", async () => {
+      selectedProjectId = project.id;
+      document.querySelectorAll("#projectList .item").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      setJson(project.raw);
+      await loadTopics(project);
+    });
+
+    projectList.appendChild(button);
+  });
+}
+
+function renderTopics(items) {
+  topicList.innerHTML = "";
+  topicCount.textContent = String(items.length);
+  setTopicsData(items);
+
+  if (!items.length) {
+    topicList.innerHTML = '<p class="empty-state">Nenhum topico encontrado.</p>';
+    return;
+  }
+
+  const { activeTopics, completedTopics } = splitTopicsByCompletion(items);
+
+  topicList.appendChild(buildTopicsTable("Topicos em andamento", activeTopics));
+  topicList.appendChild(buildTopicsTable("Topicos concluidos", completedTopics));
+}
+
+async function fetchBcfTopics(projectId, token, projectRaw = {}) {
+  const errors = [];
+  const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
+  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId).sort((a, b) => {
+    const hostA = orderedHosts.indexOf(new URL(a.url).origin);
+    const hostB = orderedHosts.indexOf(new URL(b.url).origin);
+    return hostA - hostB;
+  });
+
+  for (const endpoint of endpointCandidates) {
+    try {
+      const payload = await fetchJson(endpoint.url, token);
+      return {
+        payload,
+        endpoint,
+      };
+    } catch (error) {
+      errors.push({
+        url: endpoint.url,
+        version: endpoint.version,
+        message: error.message,
+      });
+    }
+  }
+
+  const message = errors
+    .map((error) => `[BCF ${error.version}] ${error.url} -> ${error.message}`)
+    .join(" || ");
+  throw new Error(`Nenhum endpoint BCF retornou topicos. Tentativas: ${message}`);
+}
+
+async function loadTopics(project) {
+  if (!project?.id) {
+    setStatus("Projeto selecionado invalido.", "error");
+    setTopicsData([]);
+    renderTopics([]);
+    topicCount.textContent = "0";
+    return;
+  }
+
+  if (!accessToken) {
+    setStatus("Token de acesso nao disponivel.", "error");
+    setTopicsData([]);
+    renderTopics([]);
+    topicCount.textContent = "0";
+    return;
+  }
+
   setStatus("Carregando topicos...");
-  setListMessage(topicList, "Carregando...");
-  topicCount.textContent = "...";
-  topicSummary.textContent = "Organizando dados do projeto...";
+  setTopicsData([]);
+  topicList.innerHTML = '<p class="empty-state">Carregando topicos...</p>';
 
   try {
-    const responsePayload = await fetchJson(
-      `/api/projects/${encodeURIComponent(project.id)}/topics?location=${encodeURIComponent(project.location || "")}`,
-      accessToken
-    );
+    const topicsResponse = await fetchBcfTopics(project.id, accessToken, project.raw || project);
+    const topics = normalizeTopics(topicsResponse.payload);
 
-    if (requestId !== topicRequestId) {
-      return;
-    }
-
-    const bcfEndpoint = responsePayload?.bcfEndpoint || responsePayload?.endpoint || {
-      version: "auto",
-      url: `/api/projects/${project.id}/topics`,
-    };
-    const rawTopicsPayload = responsePayload?.raw || responsePayload?.payload || responsePayload?.topics || responsePayload;
-
-    currentTopics = normalizeTopics(rawTopicsPayload);
-    selectedTopicId = "";
-    renderTopics(currentTopics);
-    setJson(
-      {
-        projectId: project.id,
-        bcfEndpoint,
-        topics: currentTopics,
-        raw: rawTopicsPayload,
-      },
-      `resultado do projeto ${project.name || project.id}`
-    );
-    setStatus(currentTopics.length ? "Topicos carregados." : "Nenhum topico encontrado.");
+    renderTopics(topics);
+    setJson({
+      projectId: project.id,
+      bcfEndpoint: topicsResponse.endpoint,
+      topics,
+      raw: topicsResponse.payload,
+    });
+    setStatus("Topicos carregados. Clique em Exibir topicos para ver a listagem.");
   } catch (error) {
-    if (requestId !== topicRequestId) {
-      return;
-    }
-
-    currentTopics = [];
-    setListMessage(topicList, error.message);
-    topicCount.textContent = "0";
-    topicSummary.textContent = "Nao foi possivel montar a tabela deste projeto.";
-    setJson(
-      {
-        projectId: project.id,
-        projectRaw: project.raw,
-        error: error.message,
-      },
-      `erro do projeto ${project.name || project.id}`
-    );
-    setStatus("Falha ao carregar topicos.");
+    setTopicsData([]);
+    renderTopics([]);
+    setJson({
+      projectId: project.id,
+      projectRaw: project.raw || project,
+      error: error.message,
+    });
+    setStatus("Falha ao carregar topicos.", "error");
   }
 }
 
 async function loadCurrentProject() {
+  if (!workspaceApi?.project) {
+    setStatus("Workspace API do projeto nao disponivel.", "error");
+    return;
+  }
+
   try {
     const project =
       (await workspaceApi.project.getCurrentProject?.()) ||
       (await workspaceApi.project.getProject?.());
 
     if (!project) {
-      currentProjectId = "";
       currentProjectName.textContent = "Projeto nao encontrado";
       currentProjectMeta.textContent = "Abra a extensao dentro de um projeto.";
+      currentProjectId = "";
       return;
     }
 
     currentProjectId = project.id || project.projectId || "";
-    if (!selectedProjectId && currentProjectId) {
-      selectedProjectId = currentProjectId;
-    }
-
     currentProjectName.textContent = project.name || project.projectName || "Projeto atual";
     currentProjectMeta.textContent = [project.id, project.number].filter(Boolean).join(" | ");
   } catch (error) {
     currentProjectId = "";
-    currentProjectName.textContent = "Falha ao ler projeto";
+    currentProjectName.textContent = "Falha ao ler o projeto atual";
     currentProjectMeta.textContent = error.message;
+    setStatus("Nao foi possivel obter o projeto atual.", "error");
   }
-}
-
-function getInitialProject() {
-  return (
-    projects.find((project) => project.id === currentProjectId) ||
-    projects.find((project) => project.id === selectedProjectId) ||
-    projects[0]
-  );
-}
-
-async function loadProjects(force = false) {
-  if (projectLoadPromise && !force) {
-    return projectLoadPromise;
-  }
-
-  projectLoadPromise = (async () => {
-    if (!accessToken) {
-      throw new Error("Token de acesso indisponivel.");
-    }
-
-    setStatus("Carregando projetos...");
-
-    const payload = await fetchJson(PROJECTS_URL, accessToken);
-    projects = normalizeProjects(payload);
-
-    const initialProject = getInitialProject();
-    if (initialProject) {
-      selectedProjectId = initialProject.id;
-    }
-
-    renderProjects();
-
-    if (!initialProject) {
-      currentTopics = [];
-      setListMessage(topicList, "Nenhum projeto encontrado.");
-      topicCount.textContent = "0";
-      topicSummary.textContent = "Nenhum projeto disponivel para consulta.";
-      setJson("Sem dados.", "sem dados");
-      setStatus("Nenhum projeto encontrado.");
-      return;
-    }
-
-    setJson(initialProject.raw, `projeto ${initialProject.name}`);
-    await loadTopics(initialProject);
-  })().finally(() => {
-    projectLoadPromise = null;
-  });
-
-  return projectLoadPromise;
 }
 
 async function requestAccessToken() {
+  if (!workspaceApi?.extension?.requestPermission) {
+    throw new Error("Workspace API de extensao nao disponivel.");
+  }
+
   const result = await workspaceApi.extension.requestPermission("accesstoken");
 
   if (result === "pending") {
+    permissionState.textContent = "Pendente";
     setStatus("Aguardando permissao do usuario.");
     return;
   }
 
   if (result === "denied") {
+    permissionState.textContent = "Negado";
     throw new Error("Permissao do token negada.");
   }
 
-  accessToken = result;
+  accessToken = String(result);
+  permissionState.textContent = "Concedido";
+  setStatus("Token recebido.");
 }
 
-async function refreshData() {
-  await loadCurrentProject();
-
+async function loadProjects() {
   if (!accessToken) {
-    await requestAccessToken();
+    throw new Error("Token de acesso nao disponivel.");
   }
 
-  if (accessToken) {
-    await loadProjects(true);
+  setStatus("Carregando projetos...");
+
+  const payload = await fetchJson(
+    "https://app.connect.trimble.com/tc/api/2.0/projects?fullyLoaded=false",
+    accessToken
+  );
+
+  projects = normalizeProjects(payload);
+  renderProjects();
+
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
+
+  if (selectedProject) {
+    setJson(selectedProject.raw);
+    await loadTopics(selectedProject);
+  } else {
+    topicList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
+    setTopicsData([]);
+    topicCount.textContent = "0";
+    setJson("Sem dados.");
+    setStatus("Nenhum projeto encontrado.", "error");
   }
 }
 
 async function initialize() {
+  if (!window.TrimbleConnectWorkspace?.connect) {
+    setStatus("Workspace API indisponivel.", "error");
+    return;
+  }
+
   workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
     if (event === "extension.accessToken" && typeof args?.data === "string") {
       accessToken = args.data;
-
-      if (!projects.length && !projectLoadPromise) {
-        try {
-          await loadProjects();
-        } catch (error) {
-          setStatus(error.message);
-          setJson(error.stack || error.message, "erro de carregamento");
-        }
-      }
+      await loadProjects();
     }
   });
 
-  setJson("Sem dados.", "resultado atual");
-  setJsonVisibility(false);
-  await refreshData();
-}
+  await loadCurrentProject();
+  await requestAccessToken();
 
-jsonToggleButton.addEventListener("click", () => {
-  setJsonVisibility(jsonPanel.hidden);
-});
+  if (accessToken) {
+    await loadProjects();
+  }
+}
 
 refreshButton.addEventListener("click", async () => {
   refreshButton.disabled = true;
 
   try {
-    await refreshData();
+    await loadCurrentProject();
+    if (!accessToken) {
+      await requestAccessToken();
+    }
+
+    if (accessToken) {
+      await loadProjects();
+    }
   } catch (error) {
-    setStatus(error.message);
-    setJson(error.stack || error.message, "erro de atualizacao");
+    setStatus(error.message, "error");
+    setJson(error.stack || error.message);
   } finally {
     refreshButton.disabled = false;
   }
 });
 
+showJsonButton.addEventListener("click", () => {
+  if (selectedJsonData == null) {
+    setStatus("Nenhum JSON selecionado.", "error");
+    return;
+  }
+
+  if (!rawOutput.hidden) {
+    rawOutput.hidden = true;
+    showJsonButton.textContent = "Exibir JSON";
+    return;
+  }
+
+  rawOutput.textContent =
+    typeof selectedJsonData === "string"
+      ? selectedJsonData
+      : JSON.stringify(selectedJsonData, null, 2);
+  rawOutput.hidden = false;
+  showJsonButton.textContent = "Ocultar JSON";
+});
+
+toggleTopicsButton.addEventListener("click", () => {
+  if (!selectedTopicsData.length) {
+    setStatus("Nenhum topico carregado.", "error");
+    return;
+  }
+
+  if (!topicList.hidden) {
+    topicList.hidden = true;
+    toggleTopicsButton.textContent = "Exibir topicos";
+    return;
+  }
+
+  topicList.hidden = false;
+  toggleTopicsButton.textContent = "Ocultar topicos";
+});
+
+exportTopicsButton.addEventListener("click", () => {
+  exportTopicsToExcel();
+});
+
 initialize().catch((error) => {
-  setStatus(error.message);
-  setJson(error.stack || error.message, "erro de inicializacao");
+  setStatus(error.message, "error");
+  setJson(error.stack || error.message);
 });
