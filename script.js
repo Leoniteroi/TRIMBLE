@@ -4,6 +4,7 @@ const rawOutput = document.getElementById("rawOutput");
 const refreshButton = document.getElementById("refreshButton");
 const showJsonButton = document.getElementById("showJsonButton");
 const toggleTopicsButton = document.getElementById("toggleTopicsButton");
+const exportTopicsButton = document.getElementById("exportTopicsButton");
 const currentProjectName = document.getElementById("currentProjectName");
 const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
@@ -27,6 +28,7 @@ const TOPICS_REGION_HOSTS = {
   asiapacific: "https://open31.connect.trimble.com",
   australia: "https://open32.connect.trimble.com",
 };
+const COMPLETED_TOPIC_STATUS_KEYS = new Set(["resolved", "done", "closed"]);
 
 function setStatus(message, type = "info") {
   statusMessage.textContent = message;
@@ -43,6 +45,7 @@ function setJson(data) {
 function setTopicsData(items) {
   selectedTopicsData = Array.isArray(items) ? items : [];
   toggleTopicsButton.disabled = selectedTopicsData.length === 0;
+  exportTopicsButton.disabled = selectedTopicsData.length === 0;
   toggleTopicsButton.textContent = "Exibir topicos";
   topicList.hidden = true;
 }
@@ -136,66 +139,148 @@ function slugifyTopicValue(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-async function fetchJson(url, token) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-  }
-
-  return response.json();
+function getTopicStatusKey(value) {
+  return slugifyTopicValue(value);
 }
 
-function renderProjects() {
-  projectList.innerHTML = "";
-  projectCount.textContent = String(projects.length);
-
-  if (!projects.length) {
-    projectList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
-    return;
+function getTopicDueDateOrder(value) {
+  if (!value) {
+    return Number.MAX_SAFE_INTEGER;
   }
 
-  projects.forEach((project, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "item";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? Number.MAX_SAFE_INTEGER : date.getTime();
+}
 
-    if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
-      selectedProjectId = project.id;
-      button.classList.add("active");
+function sortTopicsByDueDate(items) {
+  return [...items].sort((a, b) => {
+    const dueDateDiff = getTopicDueDateOrder(a.dueDate) - getTopicDueDateOrder(b.dueDate);
+
+    if (dueDateDiff !== 0) {
+      return dueDateDiff;
     }
 
-    const title = document.createElement("span");
-    title.className = "title";
-    title.textContent = project.name;
-
-    button.append(title);
-    button.addEventListener("click", async () => {
-      selectedProjectId = project.id;
-      document.querySelectorAll("#projectList .item").forEach((item) => {
-        item.classList.toggle("active", item === button);
-      });
-      setJson(project.raw);
-      await loadTopics(project);
-    });
-
-    projectList.appendChild(button);
+    return a.title.localeCompare(b.title, "pt-BR");
   });
 }
 
-function renderTopics(items) {
-  topicList.innerHTML = "";
-  topicCount.textContent = String(items.length);
-  setTopicsData(items);
+function splitTopicsByCompletion(items) {
+  const sortedTopics = sortTopicsByDueDate(items);
+
+  return {
+    activeTopics: sortedTopics.filter(
+      (topic) => !COMPLETED_TOPIC_STATUS_KEYS.has(getTopicStatusKey(topic.status))
+    ),
+    completedTopics: sortedTopics.filter((topic) =>
+      COMPLETED_TOPIC_STATUS_KEYS.has(getTopicStatusKey(topic.status))
+    ),
+  };
+}
+
+function escapeSpreadsheetXml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function sanitizeWorksheetName(value) {
+  return String(value)
+    .replace(/[\\/*?:[\]]/g, "")
+    .slice(0, 31);
+}
+
+function buildExcelWorksheetXml(name, items) {
+  const columns = [
+    "Codigo",
+    "Titulo",
+    "Status",
+    "Tipo",
+    "Prioridade",
+    "Vencimento",
+    "Etiquetas",
+    "Responsavel",
+  ];
+  const rows = items.map((topic) => [
+    topic.code,
+    topic.title,
+    topic.status,
+    topic.type,
+    topic.priority,
+    formatTopicDate(topic.dueDate),
+    topic.labels.join(", "),
+    topic.owner,
+  ]);
+
+  const headerXml = `<Row ss:StyleID="header">${columns
+    .map((column) => `<Cell><Data ss:Type="String">${escapeSpreadsheetXml(column)}</Data></Cell>`)
+    .join("")}</Row>`;
+  const rowsXml = rows
+    .map(
+      (row) =>
+        `<Row>${row
+          .map((cell) => `<Cell><Data ss:Type="String">${escapeSpreadsheetXml(cell)}</Data></Cell>`)
+          .join("")}</Row>`
+    )
+    .join("");
+
+  return `<Worksheet ss:Name="${escapeSpreadsheetXml(sanitizeWorksheetName(name))}"><Table>${headerXml}${rowsXml}</Table></Worksheet>`;
+}
+
+function exportTopicsToExcel() {
+  if (!selectedTopicsData.length) {
+    setStatus("Nenhum topico carregado para exportar.", "error");
+    return;
+  }
+
+  const { activeTopics, completedTopics } = splitTopicsByCompletion(selectedTopicsData);
+  const workbookXml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1"/>
+   <Interior ss:Color="#EEF7FF" ss:Pattern="Solid"/>
+  </Style>
+ </Styles>
+ ${buildExcelWorksheetXml("Topicos em andamento", activeTopics)}
+ ${buildExcelWorksheetXml("Topicos concluidos", completedTopics)}
+</Workbook>`;
+  const blob = new Blob([workbookXml], { type: "application/vnd.ms-excel" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const fileDate = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `topicos-${selectedProjectId || "projeto"}-${fileDate}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  setStatus("Tabelas exportadas para Excel.");
+}
+
+function buildTopicsTable(title, items) {
+  const section = document.createElement("section");
+  section.className = "topic-table-section";
+
+  const heading = document.createElement("h3");
+  heading.className = "topic-table-heading";
+  heading.textContent = `${title} (${items.length})`;
+  section.appendChild(heading);
 
   if (!items.length) {
-    topicList.innerHTML = '<p class="empty-state">Nenhum topico encontrado.</p>';
-    return;
+    const emptyState = document.createElement("p");
+    emptyState.className = "empty-state";
+    emptyState.textContent = "Nenhum topico nesta secao.";
+    section.appendChild(emptyState);
+    return section;
   }
 
   const tableWrapper = document.createElement("div");
@@ -203,7 +288,7 @@ function renderTopics(items) {
 
   const table = document.createElement("table");
   table.className = "topic-table";
-  table.setAttribute("aria-label", "Tabela de topicos do projeto");
+  table.setAttribute("aria-label", title);
 
   const thead = document.createElement("thead");
   const headerRow = document.createElement("tr");
@@ -301,7 +386,77 @@ function renderTopics(items) {
 
   table.append(thead, tbody);
   tableWrapper.appendChild(table);
-  topicList.appendChild(tableWrapper);
+  section.appendChild(tableWrapper);
+
+  return section;
+}
+
+async function fetchJson(url, token) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json();
+}
+
+function renderProjects() {
+  projectList.innerHTML = "";
+  projectCount.textContent = String(projects.length);
+
+  if (!projects.length) {
+    projectList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
+    return;
+  }
+
+  projects.forEach((project, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "item";
+
+    if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
+      selectedProjectId = project.id;
+      button.classList.add("active");
+    }
+
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = project.name;
+
+    button.append(title);
+    button.addEventListener("click", async () => {
+      selectedProjectId = project.id;
+      document.querySelectorAll("#projectList .item").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      setJson(project.raw);
+      await loadTopics(project);
+    });
+
+    projectList.appendChild(button);
+  });
+}
+
+function renderTopics(items) {
+  topicList.innerHTML = "";
+  topicCount.textContent = String(items.length);
+  setTopicsData(items);
+
+  if (!items.length) {
+    topicList.innerHTML = '<p class="empty-state">Nenhum topico encontrado.</p>';
+    return;
+  }
+
+  const { activeTopics, completedTopics } = splitTopicsByCompletion(items);
+
+  topicList.appendChild(buildTopicsTable("Topicos em andamento", activeTopics));
+  topicList.appendChild(buildTopicsTable("Topicos concluidos", completedTopics));
 }
 
 async function fetchBcfTopics(projectId, token, projectRaw = {}) {
@@ -536,6 +691,10 @@ toggleTopicsButton.addEventListener("click", () => {
 
   topicList.hidden = false;
   toggleTopicsButton.textContent = "Ocultar topicos";
+});
+
+exportTopicsButton.addEventListener("click", () => {
+  exportTopicsToExcel();
 });
 
 initialize().catch((error) => {

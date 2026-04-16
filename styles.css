@@ -133,6 +133,13 @@ pre {
   gap: 16px;
 }
 
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .panel-header h2 {
   margin: 8px 0 0;
   font-family: "Space Grotesk", "Inter", sans-serif;
@@ -141,7 +148,8 @@ pre {
 
 #refreshButton,
 #showJsonButton,
-#toggleTopicsButton {
+#toggleTopicsButton,
+#exportTopicsButton {
   border: 0;
   border-radius: 999px;
   padding: 0.9rem 1.2rem;
@@ -154,14 +162,16 @@ pre {
 
 #refreshButton:hover,
 #showJsonButton:hover,
-#toggleTopicsButton:hover {
+#toggleTopicsButton:hover,
+#exportTopicsButton:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 34px rgba(0, 163, 224, 0.3);
 }
 
 #refreshButton:disabled,
 #showJsonButton:disabled,
-#toggleTopicsButton:disabled {
+#toggleTopicsButton:disabled,
+#exportTopicsButton:disabled {
   opacity: 0.7;
   cursor: progress;
   transform: none;
@@ -228,6 +238,17 @@ pre {
 .topic-list {
   margin-top: 20px;
   display: block;
+}
+
+.topic-table-section + .topic-table-section {
+  margin-top: 18px;
+}
+
+.topic-table-heading {
+  margin: 0 0 10px;
+  font-family: "Space Grotesk", "Inter", sans-serif;
+  font-size: 1rem;
+  color: var(--ink);
 }
 
 .project-item {
@@ -461,6 +482,10 @@ pre {
   .panel-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .panel-header-actions {
+    width: 100%;
   }
 
   .topic-table {
