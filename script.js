@@ -17,6 +17,7 @@ let accessToken = "";
 let selectedProjectId = "";
 let projects = [];
 let currentProjectId = "";
+let selectedJsonData = null;
 
 const TOPICS_REGION_HOSTS = {
   northamerica: "https://open11.connect.trimble.com",
@@ -31,7 +32,10 @@ function setStatus(message, type = "info") {
 }
 
 function setJson(data) {
-  rawOutput.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  selectedJsonData = data;
+  showJsonButton.disabled = data == null;
+  showJsonButton.textContent = "Exibir JSON";
+  rawOutput.hidden = true;
 }
 
 function normalizeProjectLocation(location) {
@@ -236,15 +240,11 @@ async function loadTopics(project) {
     setStatus("Topicos carregados.");
   } catch (error) {
     renderTopics([]);
-    rawOutput.textContent = JSON.stringify(
-      {
-        projectId: project.id,
-        projectRaw: project.raw || project,
-        error: error.message,
-      },
-      null,
-      2
-    );
+    setJson({
+      projectId: project.id,
+      projectRaw: project.raw || project,
+      error: error.message,
+    });
     setStatus("Falha ao carregar topicos.", "error");
   }
 }
@@ -368,6 +368,26 @@ refreshButton.addEventListener("click", async () => {
   } finally {
     refreshButton.disabled = false;
   }
+});
+
+showJsonButton.addEventListener("click", () => {
+  if (selectedJsonData == null) {
+    setStatus("Nenhum JSON selecionado.", "error");
+    return;
+  }
+
+  if (!rawOutput.hidden) {
+    rawOutput.hidden = true;
+    showJsonButton.textContent = "Exibir JSON";
+    return;
+  }
+
+  rawOutput.textContent =
+    typeof selectedJsonData === "string"
+      ? selectedJsonData
+      : JSON.stringify(selectedJsonData, null, 2);
+  rawOutput.hidden = false;
+  showJsonButton.textContent = "Ocultar JSON";
 });
 
 initialize().catch((error) => {

@@ -135,7 +135,8 @@ pre {
   font-size: 1.6rem;
 }
 
-#refreshButton {
+#refreshButton,
+#showJsonButton {
   border: 0;
   border-radius: 999px;
   padding: 0.9rem 1.2rem;
@@ -146,12 +147,14 @@ pre {
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-#refreshButton:hover {
+#refreshButton:hover,
+#showJsonButton:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 34px rgba(0, 163, 224, 0.3);
 }
 
-#refreshButton:disabled {
+#refreshButton:disabled,
+#showJsonButton:disabled {
   opacity: 0.7;
   cursor: progress;
   transform: none;
