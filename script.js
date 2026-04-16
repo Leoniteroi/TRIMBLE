@@ -96,12 +96,44 @@ function normalizeTopics(payload) {
 
   return items.map((topic) => ({
     id: topic.topic_id || topic.id || topic.guid || "",
+    code: topic.server_assigned_id || topic.topic_id || topic.id || topic.guid || "-",
     title: topic.title || topic.topic_title || topic.description || "Topico sem titulo",
-    meta: [topic.topic_status || topic.status, topic.topic_type || topic.type, topic.guid || topic.id]
-      .filter(Boolean)
-      .join(" | "),
+    status: topic.topic_status || topic.status || "-",
+    type: topic.topic_type || topic.type || "-",
+    priority: topic.priority || "-",
+    dueDate: topic.due_date || "",
+    labels: Array.isArray(topic.labels) ? topic.labels : [],
+    owner: topic.assigned_to || topic.creation_author || "-",
+    createdBy: topic.creation_author || "-",
+    updatedAt: topic.modified_date || topic.creation_date || "",
     raw: topic,
   }));
+}
+
+function formatTopicDate(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function slugifyTopicValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 async function fetchJson(url, token) {
@@ -124,7 +156,7 @@ function renderProjects() {
   projectCount.textContent = String(projects.length);
 
   if (!projects.length) {
-    projectList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
+    projectList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
     return;
   }
 
@@ -162,25 +194,114 @@ function renderTopics(items) {
   setTopicsData(items);
 
   if (!items.length) {
-    topicList.innerHTML = '<p class="empty">Nenhum topico encontrado.</p>';
+    topicList.innerHTML = '<p class="empty-state">Nenhum topico encontrado.</p>';
     return;
   }
 
-  items.forEach((topic) => {
-    const article = document.createElement("article");
-    article.className = "item";
+  const tableWrapper = document.createElement("div");
+  tableWrapper.className = "topic-table-wrapper";
 
-    const title = document.createElement("span");
-    title.className = "title";
-    title.textContent = topic.title;
+  const table = document.createElement("table");
+  table.className = "topic-table";
+  table.setAttribute("aria-label", "Tabela de topicos do projeto");
 
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = topic.meta;
-
-    article.append(title, meta);
-    topicList.appendChild(article);
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  [
+    "Codigo",
+    "Titulo",
+    "Status",
+    "Tipo",
+    "Prioridade",
+    "Vencimento",
+    "Etiquetas",
+    "Responsavel",
+  ].forEach((label) => {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = label;
+    headerRow.appendChild(th);
   });
+  thead.appendChild(headerRow);
+
+  const tbody = document.createElement("tbody");
+
+  items.forEach((topic) => {
+    const row = document.createElement("tr");
+
+    const codeCell = document.createElement("td");
+    codeCell.className = "topic-code";
+    codeCell.textContent = topic.code;
+
+    const titleCell = document.createElement("td");
+    const titleBlock = document.createElement("div");
+    titleBlock.className = "topic-title-cell";
+
+    const titleText = document.createElement("strong");
+    titleText.className = "topic-main-title";
+    titleText.textContent = topic.title;
+
+    const subtitleText = document.createElement("span");
+    subtitleText.className = "topic-subtitle";
+    subtitleText.textContent = `${topic.id} | Atualizado em ${formatTopicDate(topic.updatedAt)}`;
+
+    titleBlock.append(titleText, subtitleText);
+    titleCell.appendChild(titleBlock);
+
+    const statusCell = document.createElement("td");
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `topic-badge status-${slugifyTopicValue(topic.status)}`;
+    statusBadge.textContent = topic.status;
+    statusCell.appendChild(statusBadge);
+
+    const typeCell = document.createElement("td");
+    typeCell.textContent = topic.type;
+
+    const priorityCell = document.createElement("td");
+    const priorityBadge = document.createElement("span");
+    priorityBadge.className = `topic-badge priority-${slugifyTopicValue(topic.priority)}`;
+    priorityBadge.textContent = topic.priority;
+    priorityCell.appendChild(priorityBadge);
+
+    const dueDateCell = document.createElement("td");
+    dueDateCell.textContent = formatTopicDate(topic.dueDate);
+
+    const labelsCell = document.createElement("td");
+    if (topic.labels.length) {
+      const labelsGroup = document.createElement("div");
+      labelsGroup.className = "topic-labels";
+
+      topic.labels.forEach((label) => {
+        const pill = document.createElement("span");
+        pill.className = "topic-label-pill";
+        pill.textContent = label;
+        labelsGroup.appendChild(pill);
+      });
+
+      labelsCell.appendChild(labelsGroup);
+    } else {
+      labelsCell.textContent = "-";
+    }
+
+    const ownerCell = document.createElement("td");
+    ownerCell.textContent = topic.owner;
+
+    row.append(
+      codeCell,
+      titleCell,
+      statusCell,
+      typeCell,
+      priorityCell,
+      dueDateCell,
+      labelsCell,
+      ownerCell
+    );
+    tbody.appendChild(row);
+  });
+
+  table.append(thead, tbody);
+  tableWrapper.appendChild(table);
+  topicList.appendChild(tableWrapper);
 }
 
 async function fetchBcfTopics(projectId, token, projectRaw = {}) {
@@ -233,7 +354,7 @@ async function loadTopics(project) {
 
   setStatus("Carregando topicos...");
   setTopicsData([]);
-  topicList.innerHTML = '<p class="empty">Carregando...</p>';
+  topicList.innerHTML = '<p class="empty-state">Carregando topicos...</p>';
 
   try {
     const topicsResponse = await fetchBcfTopics(project.id, accessToken, project.raw || project);
@@ -332,7 +453,7 @@ async function loadProjects() {
     setJson(selectedProject.raw);
     await loadTopics(selectedProject);
   } else {
-    topicList.innerHTML = '<p class="empty">Nenhum projeto encontrado.</p>';
+    topicList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
     setTopicsData([]);
     topicCount.textContent = "0";
     setJson("Sem dados.");
