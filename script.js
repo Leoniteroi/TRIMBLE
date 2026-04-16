@@ -417,7 +417,7 @@ async function loadTopics(project) {
   topicSummary.textContent = "Organizando dados do projeto...";
 
   try {
-    const payload = await fetchJson(
+    const responsePayload = await fetchJson(
       `/api/projects/${encodeURIComponent(project.id)}/topics?location=${encodeURIComponent(project.location || "")}`,
       accessToken
     );
@@ -426,18 +426,21 @@ async function loadTopics(project) {
       return;
     }
 
-    currentTopics = normalizeTopics(payload);
+    const bcfEndpoint = responsePayload?.bcfEndpoint || responsePayload?.endpoint || {
+      version: "auto",
+      url: `/api/projects/${project.id}/topics`,
+    };
+    const rawTopicsPayload = responsePayload?.raw || responsePayload?.payload || responsePayload?.topics || responsePayload;
+
+    currentTopics = normalizeTopics(rawTopicsPayload);
     selectedTopicId = "";
     renderTopics(currentTopics);
     setJson(
       {
         projectId: project.id,
-        bcfEndpoint: {
-          version: "auto",
-          url: `/api/projects/${project.id}/topics`,
-        },
+        bcfEndpoint,
         topics: currentTopics,
-        raw: payload,
+        raw: rawTopicsPayload,
       },
       `resultado do projeto ${project.name || project.id}`
     );

@@ -11,11 +11,26 @@ const STATIC_TYPES = {
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
 };
-const TOPICS_REGION_HOSTS = {
-  northamerica: "https://open11.connect.trimble.com",
-  europe: "https://open21.connect.trimble.com",
-  asiapacific: "https://open31.connect.trimble.com",
-  australia: "https://open32.connect.trimble.com",
+
+const REGION_HOSTS = {
+  northamerica: [
+    "https://open11.connect.trimble.com",
+    "https://app.connect.trimble.com",
+  ],
+  europe: [
+    "https://open21.connect.trimble.com",
+    "https://app21.connect.trimble.com",
+  ],
+  asiapacific: [
+    "https://open31.connect.trimble.com",
+    "https://app31.connect.trimble.com",
+  ],
+  australia: [
+    "https://open32.connect.trimble.com",
+    "https://app32.connect.trimble.com",
+    "https://open31.connect.trimble.com",
+    "https://app31.connect.trimble.com",
+  ],
 };
 
 function sendJson(response, statusCode, payload) {
@@ -51,6 +66,19 @@ function serveFile(requestPath, response) {
   });
 }
 
+function normalizeProjectLocation(location) {
+  return String(location || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
+function buildTopicHosts(location) {
+  const normalizedLocation = normalizeProjectLocation(location);
+  const preferredHosts = REGION_HOSTS[normalizedLocation] || [];
+  const fallbackHosts = Object.values(REGION_HOSTS).flat();
+  return [...new Set([...preferredHosts, ...fallbackHosts])];
+}
+
 async function fetchJson(url, token) {
   const response = await fetch(url, {
     headers: {
@@ -69,63 +97,32 @@ async function fetchJson(url, token) {
   return body;
 }
 
-function normalizeProjectLocation(location) {
-  return String(location || "")
-    .toLowerCase()
-    .replace(/[^a-z]/g, "");
-}
+async function loadTopics(projectId, location, token) {
+  const hosts = buildTopicHosts(location);
+  const failures = [];
 
-function prioritizeTopicHostsByProject(projectRaw) {
-  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
-  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
+  for (const host of hosts) {
+    for (const version of ["3.0", "2.1"]) {
+      const suffix = version === "2.1" ? "?top=500" : "";
+      const url = `${host}/bcf/${version}/projects/${projectId}/topics${suffix}`;
 
-  if (!prioritizedHost) {
-    return allHosts;
-  }
-
-  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
-}
-
-function buildBcfTopicEndpointCandidates(projectId) {
-  const encodedProjectId = encodeURIComponent(projectId);
-  const bcf3Path = `/bcf/3.0/projects/${encodedProjectId}/topics`;
-  const bcf21Path = `/bcf/2.1/projects/${encodedProjectId}/topics?top=500`;
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  return allHosts.flatMap((host) => [
-    { version: "3.0", url: `${host}${bcf3Path}` },
-    { version: "2.1", url: `${host}${bcf21Path}` },
-  ]);
-}
-
-async function fetchBcfTopics(projectId, token, projectRaw = {}) {
-  const errors = [];
-  const orderedHosts = prioritizeTopicHostsByProject(projectRaw);
-  const endpointCandidates = buildBcfTopicEndpointCandidates(projectId).sort((a, b) => {
-    const hostA = orderedHosts.indexOf(new URL(a.url).origin);
-    const hostB = orderedHosts.indexOf(new URL(b.url).origin);
-    return hostA - hostB;
-  });
-
-  for (const endpoint of endpointCandidates) {
-    try {
-      const payload = await fetchJson(endpoint.url, token);
-      return {
-        endpoint,
-        payload,
-      };
-    } catch (error) {
-      errors.push({
-        url: endpoint.url,
-        version: endpoint.version,
-        status: error.status || null,
-        body: error.body || null,
-      });
+      try {
+        return {
+          payload: await fetchJson(url, token),
+          endpoint: { version, url },
+        };
+      } catch (error) {
+        failures.push({
+          url,
+          version,
+          status: error.status || null,
+          body: error.body || null,
+        });
+      }
     }
   }
 
-  throw errors;
+  throw failures;
 }
 
 http
@@ -143,14 +140,12 @@ http
       }
 
       try {
-        const topicsResponse = await fetchBcfTopics(decodeURIComponent(topicMatch[1]), token, {
-          location: url.searchParams.get("location") || "",
-        });
-        sendJson(response, 200, {
-          bcfEndpoint: topicsResponse.endpoint,
-          topics: topicsResponse.payload,
-          raw: topicsResponse.payload,
-        });
+        const result = await loadTopics(
+          decodeURIComponent(topicMatch[1]),
+          url.searchParams.get("location") || "",
+          token
+        );
+        sendJson(response, 200, result.payload);
       } catch (failures) {
         sendJson(response, 502, { message: "Falha ao carregar topicos.", failures });
       }
