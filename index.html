@@ -35,18 +35,31 @@
 
           <section class="card">
             <div class="section-header">
-              <h2>Topicos</h2>
+              <div>
+                <h2>Topicos</h2>
+                <p id="topicSummary" class="muted">Selecione um projeto.</p>
+              </div>
               <span id="topicCount">0</span>
             </div>
-            <div id="topicList" class="list">
+            <div id="topicList" class="table-host">
               <p class="empty">Selecione um projeto.</p>
             </div>
           </section>
         </section>
 
         <section class="card">
-          <h2>JSON</h2>
-          <pre id="rawOutput">Sem dados.</pre>
+          <div class="section-header">
+            <div>
+              <h2>JSON</h2>
+              <p id="jsonHint" class="muted">O resultado bruto fica oculto ate voce solicitar.</p>
+            </div>
+            <button id="jsonToggleButton" class="secondary-button" type="button" aria-expanded="false">
+              Exibir JSON do resultado
+            </button>
+          </div>
+          <div id="jsonPanel" hidden>
+            <pre id="rawOutput">Sem dados.</pre>
+          </div>
         </section>
       </div>
     </main>
