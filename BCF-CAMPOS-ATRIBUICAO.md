@@ -57,3 +57,5 @@ Quando `assignees[]` traz `type` (ex.: `USER`/`GROUP`) junto com `id`, a UI pass
 - `GROUP: <id-ou-nome>`
 
 Isso permite listar explicitamente usuários e grupos atribuídos mesmo quando o payload não traz nome amigável.
+
+Além disso, o front-end tenta resolver nomes de grupos/usuários por `id` consultando endpoints do Core API do projeto (`fullyLoaded`, `users`, `groups`, `members`) e usa esse diretório para trocar IDs por nomes quando possível.

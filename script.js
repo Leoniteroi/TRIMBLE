@@ -23,6 +23,7 @@ let projects = [];
 let currentProjectId = "";
 let selectedJsonData = null;
 let selectedTopicsData = [];
+let assigneeDirectory = new Map();
 
 const TOPICS_REGION_HOSTS = {
   northamerica: "https://open11.connect.trimble.com",
@@ -107,7 +108,7 @@ function normalizeProjects(payload) {
   }));
 }
 
-function normalizeTopicAssignee(topic) {
+function normalizeTopicAssignee(topic, directory = new Map()) {
   const normalizeAssigneeEntry = (item, forcedType = "") => {
     if (!item) {
       return [];
@@ -115,7 +116,12 @@ function normalizeTopicAssignee(topic) {
 
     if (typeof item === "string" || typeof item === "number") {
       const value = String(item).trim();
-      return value ? [forcedType ? `${forcedType}: ${value}` : value] : [];
+      if (!value) {
+        return [];
+      }
+
+      const resolvedValue = directory.get(value) || value;
+      return [forcedType ? `${forcedType}: ${resolvedValue}` : resolvedValue];
     }
 
     if (Array.isArray(item)) {
@@ -163,12 +169,19 @@ function normalizeTopicAssignee(topic) {
       item.groupId ||
       "";
     const normalizedLabel = String(label).trim();
+    const labelFromDirectory =
+      directory.get(item.id) ||
+      directory.get(item.uuid) ||
+      directory.get(item.userId) ||
+      directory.get(item.groupId) ||
+      "";
+    const resolvedLabel = labelFromDirectory || normalizedLabel;
 
-    if (!normalizedLabel) {
+    if (!resolvedLabel) {
       return [];
     }
 
-    return [type ? `${type}: ${normalizedLabel}` : normalizedLabel];
+    return [type ? `${type}: ${resolvedLabel}` : resolvedLabel];
   };
 
   const normalizedAssignees = [
@@ -195,12 +208,77 @@ function normalizeTopics(payload) {
     dueDate: topic.due_date || "",
     createdAt: topic.creation_date || "",
     labels: Array.isArray(topic.labels) ? topic.labels : [],
-    assignee: normalizeTopicAssignee(topic),
+    assignee: normalizeTopicAssignee(topic, assigneeDirectory),
     owner: topic.assigned_to || topic.creation_author || "-",
     createdBy: topic.creation_author || "-",
     updatedAt: topic.modified_date || topic.creation_date || "",
     raw: topic,
   }));
+}
+
+function extractAssigneeDirectoryEntries(payload, directory = new Map()) {
+  if (!payload) {
+    return directory;
+  }
+
+  const queue = Array.isArray(payload) ? [...payload] : [payload];
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+
+    const candidateId = current.id || current.uuid || current.userId || current.groupId || null;
+    const candidateName =
+      current.name ||
+      current.displayName ||
+      current.display_name ||
+      current.title ||
+      current.email ||
+      current.mail ||
+      null;
+
+    if (candidateId && candidateName) {
+      directory.set(String(candidateId), String(candidateName));
+    }
+
+    Object.values(current).forEach((value) => {
+      if (value && typeof value === "object") {
+        queue.push(value);
+      }
+    });
+  }
+
+  return directory;
+}
+
+async function loadAssigneeDirectory(projectId) {
+  if (!projectId || !accessToken) {
+    assigneeDirectory = new Map();
+    return;
+  }
+
+  const candidates = [
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}?fullyLoaded=true`,
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}/users`,
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}/groups`,
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}/members`,
+  ];
+
+  const directory = new Map();
+  await Promise.all(
+    candidates.map(async (url) => {
+      try {
+        const payload = await fetchJson(url, accessToken);
+        extractAssigneeDirectoryEntries(payload, directory);
+      } catch (_error) {
+        // endpoint opcional: ignora se nao estiver disponivel
+      }
+    })
+  );
+
+  assigneeDirectory = directory;
 }
 
 function formatTopicDate(value) {
@@ -616,6 +694,7 @@ async function loadTopics(project) {
   topicList.innerHTML = '<p class="empty-state">Carregando topicos...</p>';
 
   try {
+    await loadAssigneeDirectory(project.id);
     const topicsResponse = await fetchBcfTopics(project.id, accessToken, project.raw || project);
     const topics = normalizeTopics(topicsResponse.payload);
 
