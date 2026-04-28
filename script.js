@@ -107,6 +107,22 @@ function normalizeProjects(payload) {
   }));
 }
 
+function normalizeTopicAssignee(topic) {
+  const assigneeCandidates = [
+    topic.assigned_to,
+    topic.assignee,
+    ...(Array.isArray(topic.assignees)
+      ? topic.assignees.map((item) => item?.name || item?.display_name || item?.email || item?.id)
+      : []),
+  ];
+
+  const normalizedAssignees = assigneeCandidates
+    .map((value) => String(value || "").trim())
+    .filter((value) => Boolean(value));
+
+  return normalizedAssignees.length ? Array.from(new Set(normalizedAssignees)).join(", ") : "-";
+}
+
 function normalizeTopics(payload) {
   const items = Array.isArray(payload)
     ? payload
@@ -122,7 +138,7 @@ function normalizeTopics(payload) {
     dueDate: topic.due_date || "",
     createdAt: topic.creation_date || "",
     labels: Array.isArray(topic.labels) ? topic.labels : [],
-    assignee: topic.assigned_to || topic.assignee || "-",
+    assignee: normalizeTopicAssignee(topic),
     owner: topic.assigned_to || topic.creation_author || "-",
     createdBy: topic.creation_author || "-",
     updatedAt: topic.modified_date || topic.creation_date || "",
