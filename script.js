@@ -108,31 +108,74 @@ function normalizeProjects(payload) {
 }
 
 function normalizeTopicAssignee(topic) {
-  const normalizeAssigneeEntry = (item) => {
-    if (!item || typeof item !== "object") {
-      return "";
+  const normalizeAssigneeEntry = (item, forcedType = "") => {
+    if (!item) {
+      return [];
     }
 
-    const label = item.name || item.display_name || item.email || item.id || "";
-    if (!label) {
-      return "";
+    if (typeof item === "string" || typeof item === "number") {
+      const value = String(item).trim();
+      return value ? [forcedType ? `${forcedType}: ${value}` : value] : [];
     }
 
-    const type = String(item.type || "").trim().toUpperCase();
-    return type ? `${type}: ${label}` : label;
+    if (Array.isArray(item)) {
+      return item.flatMap((entry) => normalizeAssigneeEntry(entry, forcedType));
+    }
+
+    if (typeof item !== "object") {
+      return [];
+    }
+
+    if (Array.isArray(item.users) || Array.isArray(item.groups)) {
+      return [
+        ...normalizeAssigneeEntry(item.users || [], "USER"),
+        ...normalizeAssigneeEntry(item.groups || [], "GROUP"),
+      ];
+    }
+
+    if (item.member) {
+      return normalizeAssigneeEntry(item.member, forcedType);
+    }
+
+    const type = String(
+      forcedType ||
+        item.type ||
+        item.assignee_type ||
+        item.assigneeType ||
+        item.memberType ||
+        item.kind ||
+        ""
+    )
+      .trim()
+      .toUpperCase();
+    const label =
+      item.name ||
+      item.display_name ||
+      item.displayName ||
+      item.email ||
+      item.mail ||
+      item.userName ||
+      item.groupName ||
+      item.title ||
+      item.id ||
+      item.uuid ||
+      item.userId ||
+      item.groupId ||
+      "";
+    const normalizedLabel = String(label).trim();
+
+    if (!normalizedLabel) {
+      return [];
+    }
+
+    return [type ? `${type}: ${normalizedLabel}` : normalizedLabel];
   };
 
-  const assigneeCandidates = [
-    topic.assigned_to,
-    topic.assignee,
-    ...(Array.isArray(topic.assignees)
-      ? topic.assignees.map((item) => normalizeAssigneeEntry(item))
-      : []),
-  ];
-
-  const normalizedAssignees = assigneeCandidates
-    .map((value) => String(value || "").trim())
-    .filter((value) => Boolean(value));
+  const normalizedAssignees = [
+    ...normalizeAssigneeEntry(topic.assigned_to),
+    ...normalizeAssigneeEntry(topic.assignee),
+    ...normalizeAssigneeEntry(topic.assignees),
+  ].filter((value) => Boolean(value));
 
   return normalizedAssignees.length ? Array.from(new Set(normalizedAssignees)).join(", ") : "-";
 }

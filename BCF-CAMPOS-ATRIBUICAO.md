@@ -49,6 +49,7 @@ No `script.js`, a normalização do campo de atribuição agora considera:
 - `assigned_to`
 - `assignee`
 - `assignees[]` (extensão Connect, com fallback para `name`, `display_name`, `email` ou `id`)
+- objetos com estrutura `users[]`/`groups[]` e também `member` aninhado
 
 Quando `assignees[]` traz `type` (ex.: `USER`/`GROUP`) junto com `id`, a UI passa a exibir no formato:
 
