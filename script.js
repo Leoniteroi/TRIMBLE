@@ -108,11 +108,25 @@ function normalizeProjects(payload) {
 }
 
 function normalizeTopicAssignee(topic) {
+  const normalizeAssigneeEntry = (item) => {
+    if (!item || typeof item !== "object") {
+      return "";
+    }
+
+    const label = item.name || item.display_name || item.email || item.id || "";
+    if (!label) {
+      return "";
+    }
+
+    const type = String(item.type || "").trim().toUpperCase();
+    return type ? `${type}: ${label}` : label;
+  };
+
   const assigneeCandidates = [
     topic.assigned_to,
     topic.assignee,
     ...(Array.isArray(topic.assignees)
-      ? topic.assignees.map((item) => item?.name || item?.display_name || item?.email || item?.id)
+      ? topic.assignees.map((item) => normalizeAssigneeEntry(item))
       : []),
   ];
 

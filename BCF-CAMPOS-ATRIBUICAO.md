@@ -50,4 +50,9 @@ No `script.js`, a normalização do campo de atribuição agora considera:
 - `assignee`
 - `assignees[]` (extensão Connect, com fallback para `name`, `display_name`, `email` ou `id`)
 
-Isso aumenta a chance de preencher "Atribuído a" corretamente, mesmo quando o payload vem no formato Connect.
+Quando `assignees[]` traz `type` (ex.: `USER`/`GROUP`) junto com `id`, a UI passa a exibir no formato:
+
+- `USER: <id-ou-nome>`
+- `GROUP: <id-ou-nome>`
+
+Isso permite listar explicitamente usuários e grupos atribuídos mesmo quando o payload não traz nome amigável.
