@@ -10,6 +10,8 @@ const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
 const topicCount = document.getElementById("topicCount");
 const topicList = document.getElementById("topicList");
+const connectionState = document.getElementById("connectionState");
+const tokenState = document.getElementById("tokenState");
 const userName = document.getElementById("userName");
 const userEmail = document.getElementById("userEmail");
 const permissionState = document.getElementById("permissionState");
@@ -33,6 +35,19 @@ const COMPLETED_TOPIC_STATUS_KEYS = new Set(["resolved", "done", "closed"]);
 function setStatus(message, type = "info") {
   statusMessage.textContent = message;
   statusMessage.className = `status-message ${type}`;
+}
+
+function setConnectionState(state) {
+  connectionState.textContent = state;
+}
+
+function setTokenState(state) {
+  tokenState.textContent = state;
+}
+
+function setUserIdentity(profile) {
+  userName.textContent = profile?.name || profile?.displayName || profile?.fullName || "Nao identificado";
+  userEmail.textContent = profile?.email || profile?.mail || "Email nao disponivel";
 }
 
 function setJson(data) {
@@ -105,7 +120,9 @@ function normalizeTopics(payload) {
     type: topic.topic_type || topic.type || "-",
     priority: topic.priority || "-",
     dueDate: topic.due_date || "",
+    createdAt: topic.creation_date || "",
     labels: Array.isArray(topic.labels) ? topic.labels : [],
+    assignee: topic.assigned_to || topic.assignee || "-",
     owner: topic.assigned_to || topic.creation_author || "-",
     createdBy: topic.creation_author || "-",
     updatedAt: topic.modified_date || topic.creation_date || "",
@@ -199,6 +216,8 @@ function buildExcelWorksheetXml(name, items) {
     "Status",
     "Tipo",
     "Prioridade",
+    "Atribuido a",
+    "Criado em",
     "Vencimento",
     "Etiquetas",
     "Responsavel",
@@ -209,6 +228,8 @@ function buildExcelWorksheetXml(name, items) {
     topic.status,
     topic.type,
     topic.priority,
+    topic.assignee,
+    formatTopicDate(topic.createdAt),
     formatTopicDate(topic.dueDate),
     topic.labels.join(", "),
     topic.owner,
@@ -298,6 +319,8 @@ function buildTopicsTable(title, items) {
     "Status",
     "Tipo",
     "Prioridade",
+    "Atribuido a",
+    "Criado em",
     "Vencimento",
     "Etiquetas",
     "Responsavel",
@@ -348,6 +371,12 @@ function buildTopicsTable(title, items) {
     priorityBadge.textContent = topic.priority;
     priorityCell.appendChild(priorityBadge);
 
+    const assigneeCell = document.createElement("td");
+    assigneeCell.textContent = topic.assignee;
+
+    const createdAtCell = document.createElement("td");
+    createdAtCell.textContent = formatTopicDate(topic.createdAt);
+
     const dueDateCell = document.createElement("td");
     dueDateCell.textContent = formatTopicDate(topic.dueDate);
 
@@ -377,6 +406,8 @@ function buildTopicsTable(title, items) {
       statusCell,
       typeCell,
       priorityCell,
+      assigneeCell,
+      createdAtCell,
       dueDateCell,
       labelsCell,
       ownerCell
@@ -573,17 +604,20 @@ async function requestAccessToken() {
 
   if (result === "pending") {
     permissionState.textContent = "Pendente";
+    setTokenState("Pendente");
     setStatus("Aguardando permissao do usuario.");
     return;
   }
 
   if (result === "denied") {
     permissionState.textContent = "Negado";
+    setTokenState("Negado");
     throw new Error("Permissao do token negada.");
   }
 
   accessToken = String(result);
   permissionState.textContent = "Concedido";
+  setTokenState("Concedido");
   setStatus("Token recebido.");
 }
 
@@ -616,23 +650,42 @@ async function loadProjects() {
   }
 }
 
+async function loadCurrentUserProfile() {
+  if (!accessToken) {
+    return;
+  }
+
+  try {
+    const profile = await fetchJson("https://app.connect.trimble.com/tc/api/2.0/users/me", accessToken);
+    setUserIdentity(profile);
+  } catch (_error) {
+    setUserIdentity(null);
+  }
+}
+
 async function initialize() {
   if (!window.TrimbleConnectWorkspace?.connect) {
+    setConnectionState("Indisponivel");
     setStatus("Workspace API indisponivel.", "error");
     return;
   }
 
+  setConnectionState("Conectando");
   workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
     if (event === "extension.accessToken" && typeof args?.data === "string") {
       accessToken = args.data;
+      setTokenState("Concedido");
+      await loadCurrentUserProfile();
       await loadProjects();
     }
   });
+  setConnectionState("Conectado");
 
   await loadCurrentProject();
   await requestAccessToken();
 
   if (accessToken) {
+    await loadCurrentUserProfile();
     await loadProjects();
   }
 }
@@ -647,6 +700,7 @@ refreshButton.addEventListener("click", async () => {
     }
 
     if (accessToken) {
+      await loadCurrentUserProfile();
       await loadProjects();
     }
   } catch (error) {
