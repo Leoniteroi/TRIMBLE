@@ -11,12 +11,7 @@ const STATIC_TYPES = {
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
 };
-const TOPICS_REGION_HOSTS = {
-  northamerica: "https://open11.connect.trimble.com",
-  europe: "https://open21.connect.trimble.com",
-  asiapacific: "https://open31.connect.trimble.com",
-  australia: "https://open32.connect.trimble.com",
-};
+const { prioritizeTopicHostsByProject, buildBcfTopicEndpointCandidates } = require("./bcf-endpoints");
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -28,9 +23,10 @@ function sendJson(response, statusCode, payload) {
 
 function serveFile(requestPath, response) {
   const relativePath = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
-  const filePath = path.join(ROOT, path.normalize(relativePath));
+  const filePath = path.resolve(ROOT, relativePath);
+  const rootPath = path.resolve(ROOT) + path.sep;
 
-  if (!filePath.startsWith(ROOT)) {
+  if (filePath !== path.resolve(ROOT, "index.html") && !filePath.startsWith(rootPath)) {
     response.writeHead(403);
     response.end("Acesso negado.");
     return;
@@ -67,36 +63,6 @@ async function fetchJson(url, token) {
   }
 
   return body;
-}
-
-function normalizeProjectLocation(location) {
-  return String(location || "")
-    .toLowerCase()
-    .replace(/[^a-z]/g, "");
-}
-
-function prioritizeTopicHostsByProject(projectRaw) {
-  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
-  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  if (!prioritizedHost) {
-    return allHosts;
-  }
-
-  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
-}
-
-function buildBcfTopicEndpointCandidates(projectId) {
-  const encodedProjectId = encodeURIComponent(projectId);
-  const bcf3Path = `/bcf/3.0/projects/${encodedProjectId}/topics`;
-  const bcf21Path = `/bcf/2.1/projects/${encodedProjectId}/topics?top=500`;
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  return allHosts.flatMap((host) => [
-    { version: "3.0", url: `${host}${bcf3Path}` },
-    { version: "2.1", url: `${host}${bcf21Path}` },
-  ]);
 }
 
 async function fetchBcfTopics(projectId, token, projectRaw = {}) {
