@@ -174,7 +174,7 @@ function normalizeTopics(payload) {
     type: topic.topic_type || topic.type || "-",
     priority: topic.priority || "-",
     dueDate: topic.due_date || "",
-    createdAt: topic.creation_date || "",
+    createdAt: topic.creation_date || topic.created_at || topic.createdAt || topic.create_date || "",
     labels: Array.isArray(topic.labels) ? topic.labels : [],
     assignee: normalizeTopicAssignee(topic, assigneeDirectory),
     owner: topic.assigned_to || topic.creation_author || "-",
@@ -470,7 +470,7 @@ function buildTopicsTable(title, items) {
 
     const subtitleText = document.createElement("span");
     subtitleText.className = "topic-subtitle";
-    subtitleText.textContent = `${topic.id} | Atualizado em ${formatTopicDate(topic.updatedAt)}`;
+    subtitleText.textContent = `${topic.id} | Criado em ${formatTopicDate(topic.createdAt)} | Atualizado em ${formatTopicDate(topic.updatedAt)}`;
 
     titleBlock.append(titleText, subtitleText);
     titleCell.appendChild(titleBlock);
