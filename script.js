@@ -25,12 +25,7 @@ let selectedJsonData = null;
 let selectedTopicsData = [];
 let assigneeDirectory = new Map();
 
-const TOPICS_REGION_HOSTS = {
-  northamerica: "https://open11.connect.trimble.com",
-  europe: "https://open21.connect.trimble.com",
-  asiapacific: "https://open31.connect.trimble.com",
-  australia: "https://open32.connect.trimble.com",
-};
+const { prioritizeTopicHostsByProject, buildBcfTopicEndpointCandidates } = window.BcfEndpoints;
 const COMPLETED_TOPIC_STATUS_KEYS = new Set(["resolved", "done", "closed"]);
 
 function setStatus(message, type = "info") {
@@ -66,33 +61,6 @@ function setTopicsData(items) {
   topicList.hidden = true;
 }
 
-function normalizeProjectLocation(location) {
-  return String(location || "").toLowerCase().replace(/[^a-z]/g, "");
-}
-
-function prioritizeTopicHostsByProject(projectRaw) {
-  const normalizedLocation = normalizeProjectLocation(projectRaw?.location);
-  const prioritizedHost = TOPICS_REGION_HOSTS[normalizedLocation];
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  if (!prioritizedHost) {
-    return allHosts;
-  }
-
-  return [prioritizedHost, ...allHosts.filter((host) => host !== prioritizedHost)];
-}
-
-function buildBcfTopicEndpointCandidates(projectId) {
-  const encodedProjectId = encodeURIComponent(projectId);
-  const bcf3Path = `/bcf/3.0/projects/${encodedProjectId}/topics`;
-  const bcf21Path = `/bcf/2.1/projects/${encodedProjectId}/topics?top=500`;
-  const allHosts = Object.values(TOPICS_REGION_HOSTS);
-
-  return allHosts.flatMap((host) => [
-    { version: "3.0", url: `${host}${bcf3Path}` },
-    { version: "2.1", url: `${host}${bcf21Path}` },
-  ]);
-}
 
 function normalizeProjects(payload) {
   const items = Array.isArray(payload)
@@ -588,9 +556,15 @@ async function fetchJson(url, token) {
   return response.json();
 }
 
+
+function formatCount(value, singular, plural) {
+  const count = Number(value) || 0;
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function renderProjects() {
   projectList.innerHTML = "";
-  projectCount.textContent = String(projects.length);
+  projectCount.textContent = formatCount(projects.length, "projeto", "projetos");
 
   if (!projects.length) {
     projectList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
@@ -627,7 +601,7 @@ function renderProjects() {
 
 function renderTopics(items) {
   topicList.innerHTML = "";
-  topicCount.textContent = String(items.length);
+  topicCount.textContent = formatCount(items.length, "topico", "topicos");
   setTopicsData(items);
 
   if (!items.length) {
@@ -677,15 +651,17 @@ async function loadTopics(project) {
     setStatus("Projeto selecionado invalido.", "error");
     setTopicsData([]);
     renderTopics([]);
-    topicCount.textContent = "0";
+    topicCount.textContent = formatCount(0, "topico", "topicos");
     return;
   }
 
   if (!accessToken) {
+    setTokenState("Indisponivel");
+    permissionState.textContent = "Nao concedido";
     setStatus("Token de acesso nao disponivel.", "error");
     setTopicsData([]);
     renderTopics([]);
-    topicCount.textContent = "0";
+    topicCount.textContent = formatCount(0, "topico", "topicos");
     return;
   }
 
@@ -796,7 +772,7 @@ async function loadProjects() {
   } else {
     topicList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
     setTopicsData([]);
-    topicCount.textContent = "0";
+    topicCount.textContent = formatCount(0, "topico", "topicos");
     setJson("Sem dados.");
     setStatus("Nenhum projeto encontrado.", "error");
   }
@@ -812,21 +788,28 @@ async function loadCurrentUserProfile() {
     setUserIdentity(profile);
   } catch (_error) {
     setUserIdentity(null);
+    setStatus("Nao foi possivel carregar o perfil do usuario.", "error");
   }
 }
 
 async function initialize() {
   if (!window.TrimbleConnectWorkspace?.connect) {
     setConnectionState("Indisponivel");
+    setTokenState("Indisponivel");
+    permissionState.textContent = "Indisponivel";
     setStatus("Workspace API indisponivel.", "error");
     return;
   }
 
   setConnectionState("Conectando");
+  setTokenState("Nao solicitado");
+  permissionState.textContent = "Pendente";
   workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
     if (event === "extension.accessToken" && typeof args?.data === "string") {
       accessToken = args.data;
+      permissionState.textContent = "Concedido";
       setTokenState("Concedido");
+      setStatus("Token recebido por evento da extensao.", "success");
       await loadCurrentUserProfile();
       await loadProjects();
     }
