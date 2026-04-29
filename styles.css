@@ -95,7 +95,16 @@ pre {
   justify-content: space-between;
   gap: 16px;
   padding: 15px 18px;
+  overflow: hidden;
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.status-chip::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: rgba(214, 226, 252, 0.65);
 }
 
 .status-chip::after {
@@ -111,6 +120,7 @@ pre {
 .status-chip strong {
   margin-left: auto;
   text-align: right;
+  transition: color 0.18s ease;
 }
 
 .status-chip-conectado,
@@ -123,6 +133,16 @@ pre {
 .status-chip-concedido::after {
   background: #48dd8e;
   box-shadow: 0 0 0 4px rgba(72, 221, 142, 0.16);
+}
+
+.status-chip-conectado::before,
+.status-chip-concedido::before {
+  background: #48dd8e;
+}
+
+.status-chip-conectado strong,
+.status-chip-concedido strong {
+  color: #9df5c5;
 }
 
 .status-chip-conectando,
@@ -141,6 +161,20 @@ pre {
   box-shadow: 0 0 0 4px rgba(255, 200, 87, 0.16);
 }
 
+.status-chip-conectando::before,
+.status-chip-aguardando::before,
+.status-chip-pendente::before,
+.status-chip-nao-solicitado::before {
+  background: #ffc857;
+}
+
+.status-chip-conectando strong,
+.status-chip-aguardando strong,
+.status-chip-pendente strong,
+.status-chip-nao-solicitado strong {
+  color: #ffe2a1;
+}
+
 .status-chip-indisponivel,
 .status-chip-negado,
 .status-chip-nao-concedido {
@@ -153,6 +187,18 @@ pre {
 .status-chip-nao-concedido::after {
   background: #ff7a8a;
   box-shadow: 0 0 0 4px rgba(255, 122, 138, 0.16);
+}
+
+.status-chip-indisponivel::before,
+.status-chip-negado::before,
+.status-chip-nao-concedido::before {
+  background: #ff7a8a;
+}
+
+.status-chip-indisponivel strong,
+.status-chip-negado strong,
+.status-chip-nao-concedido strong {
+  color: #ffc0c8;
 }
 
 .status-label {

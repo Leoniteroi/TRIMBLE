@@ -26,6 +26,15 @@ let selectedTopicsData = [];
 let assigneeDirectory = new Map();
 let activeProjectButton = null;
 let topicsLoadRequestId = 0;
+const frontendState = {
+  connection: connectionState.textContent || "Aguardando",
+  token: tokenState.textContent || "Nao solicitado",
+  permission: permissionState.textContent || "Pendente",
+  userName: userName.textContent || "Nao identificado",
+  userEmail: userEmail.textContent || "Aguardando permissao do token",
+  projectName: currentProjectName.textContent || "Nenhum projeto carregado",
+  projectMeta: currentProjectMeta.textContent || "Abra a extensao a partir de um projeto no Trimble Connect.",
+};
 
 const { prioritizeTopicHostsByProject, buildBcfTopicEndpointCandidates } = window.BcfEndpoints;
 const COMPLETED_TOPIC_STATUS_KEYS = new Set(["resolved", "done", "closed"]);
@@ -72,32 +81,111 @@ function setVisualState(element, state) {
   chip.setAttribute("aria-label", `${chip.querySelector(".status-label")?.textContent || "Status"}: ${state}`);
 }
 
+function renderFrontendState() {
+  setVisualState(connectionState, frontendState.connection);
+  setVisualState(tokenState, frontendState.token);
+  permissionState.textContent = frontendState.permission;
+  userName.textContent = frontendState.userName;
+  userEmail.textContent = frontendState.userEmail;
+  currentProjectName.textContent = frontendState.projectName;
+  currentProjectMeta.textContent = frontendState.projectMeta;
+}
+
 function setStatus(message, type = "info") {
   statusMessage.textContent = message;
   statusMessage.className = `status-message ${type}`;
 }
 
 function setConnectionState(state) {
-  setVisualState(connectionState, state);
+  frontendState.connection = state;
+  renderFrontendState();
 }
 
 function setTokenState(state) {
-  setVisualState(tokenState, state);
+  frontendState.token = state;
+  renderFrontendState();
+}
+
+function setPermissionState(state) {
+  frontendState.permission = state;
+  renderFrontendState();
+}
+
+function setCurrentProjectState(name, meta) {
+  frontendState.projectName = name || "Nenhum projeto carregado";
+  frontendState.projectMeta = meta || "Abra a extensao a partir de um projeto no Trimble Connect.";
+  renderFrontendState();
+}
+
+function extractAccessToken(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+
+  if (value.data && typeof value.data !== "object") {
+    return value.data;
+  }
+
+  return (
+    value.accessToken ||
+    value.access_token ||
+    value.token ||
+    value.bearerToken ||
+    value.data?.accessToken ||
+    value.data?.access_token ||
+    value.data?.token ||
+    ""
+  );
 }
 
 function setAccessToken(token) {
-  const nextToken = String(token || "");
+  const nextToken = String(extractAccessToken(token) || "");
 
   if (nextToken !== accessToken) {
     assigneeDirectoryCache.clear();
   }
 
   accessToken = nextToken;
+
+  if (accessToken) {
+    frontendState.token = "Concedido";
+    frontendState.permission = "Concedido";
+    renderFrontendState();
+  }
+}
+
+function syncRuntimeFrontendState() {
+  if (workspaceApi) {
+    frontendState.connection = "Conectado";
+  }
+
+  if (accessToken) {
+    frontendState.token = "Concedido";
+    frontendState.permission = "Concedido";
+
+    if (frontendState.userName === "Nao identificado") {
+      frontendState.userName = "Perfil em carregamento";
+    }
+
+    if (frontendState.userEmail === "Aguardando permissao do token") {
+      frontendState.userEmail = "Token concedido; carregando dados do usuario";
+    }
+  }
+
+  renderFrontendState();
 }
 
 function setUserIdentity(profile) {
-  userName.textContent = profile?.name || profile?.displayName || profile?.fullName || "Nao identificado";
-  userEmail.textContent = profile?.email || profile?.mail || "Email nao disponivel";
+  const name = profile?.name || profile?.displayName || profile?.fullName || "";
+  const email = profile?.email || profile?.mail || "";
+
+  frontendState.userName = name || (accessToken ? "Perfil indisponivel" : "Nao identificado");
+  frontendState.userEmail = email || (accessToken ? "Token concedido; dados do usuario nao retornados" : "Aguardando permissao do token");
+  renderFrontendState();
 }
 
 function setJson(data) {
@@ -780,7 +868,7 @@ async function loadTopics(project) {
 
   if (!accessToken) {
     setTokenState("Nao concedido");
-    permissionState.textContent = "Nao concedido";
+    setPermissionState("Nao concedido");
     setStatus("Token de acesso nao disponivel.", "error");
     setTopicsData([]);
     renderTopics([]);
@@ -801,6 +889,7 @@ async function loadTopics(project) {
       return;
     }
 
+    syncRuntimeFrontendState();
     renderTopics(topics);
     setJson({
       projectId: project.id,
@@ -837,19 +926,19 @@ async function loadCurrentProject() {
       (await workspaceApi.project.getProject?.());
 
     if (!project) {
-      currentProjectName.textContent = "Projeto nao encontrado";
-      currentProjectMeta.textContent = "Abra a extensao dentro de um projeto.";
       currentProjectId = "";
+      setCurrentProjectState("Projeto nao encontrado", "Abra a extensao dentro de um projeto.");
       return;
     }
 
     currentProjectId = project.id || project.projectId || "";
-    currentProjectName.textContent = project.name || project.projectName || "Projeto atual";
-    currentProjectMeta.textContent = [project.id, project.number].filter(Boolean).join(" | ");
+    setCurrentProjectState(
+      project.name || project.projectName || "Projeto atual",
+      [project.id, project.number].filter(Boolean).join(" | ")
+    );
   } catch (error) {
     currentProjectId = "";
-    currentProjectName.textContent = "Falha ao ler o projeto atual";
-    currentProjectMeta.textContent = error.message;
+    setCurrentProjectState("Falha ao ler o projeto atual", error.message);
     setStatus("Nao foi possivel obter o projeto atual.", "error");
   }
 }
@@ -862,20 +951,20 @@ async function requestAccessToken() {
   const result = await workspaceApi.extension.requestPermission("accesstoken");
 
   if (result === "pending") {
-    permissionState.textContent = "Pendente";
+    setPermissionState("Pendente");
     setTokenState("Pendente");
     setStatus("Aguardando permissao do usuario.");
     return;
   }
 
   if (result === "denied") {
-    permissionState.textContent = "Negado";
+    setPermissionState("Negado");
     setTokenState("Negado");
     throw new Error("Permissao do token negada.");
   }
 
   setAccessToken(result);
-  permissionState.textContent = "Concedido";
+  setPermissionState("Concedido");
   setTokenState("Concedido");
   setStatus("Token recebido.");
 }
@@ -885,6 +974,7 @@ async function loadProjects() {
     throw new Error("Token de acesso nao disponivel.");
   }
 
+  syncRuntimeFrontendState();
   setStatus("Carregando projetos...");
 
   const payload = await fetchJson(
@@ -893,6 +983,7 @@ async function loadProjects() {
   );
 
   projects = normalizeProjects(payload);
+  syncRuntimeFrontendState();
   renderProjects();
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
@@ -914,6 +1005,8 @@ async function loadCurrentUserProfile() {
     return;
   }
 
+  syncRuntimeFrontendState();
+
   try {
     const profile = await fetchJson("https://app.connect.trimble.com/tc/api/2.0/users/me", accessToken);
     setUserIdentity(profile);
@@ -927,25 +1020,27 @@ async function initialize() {
   if (!window.TrimbleConnectWorkspace?.connect) {
     setConnectionState("Indisponivel");
     setTokenState("Indisponivel");
-    permissionState.textContent = "Indisponivel";
+    setPermissionState("Indisponivel");
     setStatus("Workspace API indisponivel.", "error");
     return;
   }
 
   setConnectionState("Conectando");
   setTokenState("Nao solicitado");
-  permissionState.textContent = "Pendente";
+  setPermissionState("Pendente");
   workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
-    if (event === "extension.accessToken" && typeof args?.data === "string") {
-      setAccessToken(args.data);
-      permissionState.textContent = "Concedido";
+    if (event === "extension.accessToken") {
+      setAccessToken(args?.data || args);
+      setPermissionState("Concedido");
       setTokenState("Concedido");
+      syncRuntimeFrontendState();
       setStatus("Token recebido por evento da extensao.", "success");
       await loadCurrentUserProfile();
       await loadProjects();
     }
   });
   setConnectionState("Conectado");
+  syncRuntimeFrontendState();
 
   await loadCurrentProject();
   await requestAccessToken();
@@ -1017,15 +1112,14 @@ exportTopicsButton.addEventListener("click", () => {
   exportTopicsToExcel();
 });
 
-setConnectionState(connectionState.textContent || "Aguardando");
-setTokenState(tokenState.textContent || "Nao solicitado");
+renderFrontendState();
 
 initialize().catch((error) => {
   if (!workspaceApi) {
     setConnectionState("Indisponivel");
   }
 
-  if (["Nao solicitado", "Pendente"].includes(tokenState.textContent)) {
+  if (["Nao solicitado", "Pendente"].includes(frontendState.token)) {
     setTokenState("Indisponivel");
   }
 
