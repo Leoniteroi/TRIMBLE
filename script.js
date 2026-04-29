@@ -117,6 +117,27 @@ function setCurrentProjectState(name, meta) {
   renderFrontendState();
 }
 
+function formatProjectMeta(project) {
+  const metadata = [
+    project?.number ? `Numero: ${project.number}` : "",
+    project?.id ? `ID: ${project.id}` : "",
+    project?.location ? `Regiao: ${project.location}` : "",
+  ].filter(Boolean);
+
+  return metadata.length ? metadata.join(" | ") : "Metadados do projeto indisponiveis";
+}
+
+function setActiveProjectState(project) {
+  if (!project) {
+    currentProjectId = "";
+    setCurrentProjectState("Nenhum projeto selecionado", "Selecione um projeto para carregar os dados.");
+    return;
+  }
+
+  currentProjectId = project.id || "";
+  setCurrentProjectState(project.name || "Projeto sem nome", formatProjectMeta(project));
+}
+
 function extractAccessToken(value) {
   if (typeof value === "string") {
     return value;
@@ -796,6 +817,7 @@ function renderProjects() {
       activeProjectButton?.classList.remove("active");
       button.classList.add("active");
       activeProjectButton = button;
+      setActiveProjectState(project);
       setJson(project.raw);
       await loadTopics(project);
     });
@@ -865,6 +887,8 @@ async function loadTopics(project) {
     topicCount.textContent = formatCount(0, "topico", "topicos");
     return;
   }
+
+  setActiveProjectState(project);
 
   if (!accessToken) {
     setTokenState("Nao concedido");
@@ -989,6 +1013,8 @@ async function loadProjects() {
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
 
   if (selectedProject) {
+    selectedProjectId = selectedProject.id;
+    setActiveProjectState(selectedProject);
     setJson(selectedProject.raw);
     await loadTopics(selectedProject);
   } else {
