@@ -1017,6 +1017,9 @@ exportTopicsButton.addEventListener("click", () => {
   exportTopicsToExcel();
 });
 
+setConnectionState(connectionState.textContent || "Aguardando");
+setTokenState(tokenState.textContent || "Nao solicitado");
+
 initialize().catch((error) => {
   if (!workspaceApi) {
     setConnectionState("Indisponivel");

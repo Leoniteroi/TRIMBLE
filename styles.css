@@ -126,6 +126,7 @@ pre {
 }
 
 .status-chip-conectando,
+.status-chip-aguardando,
 .status-chip-pendente,
 .status-chip-nao-solicitado {
   border-color: rgba(255, 193, 7, 0.34);
@@ -133,6 +134,7 @@ pre {
 }
 
 .status-chip-conectando::after,
+.status-chip-aguardando::after,
 .status-chip-pendente::after,
 .status-chip-nao-solicitado::after {
   background: #ffc857;
