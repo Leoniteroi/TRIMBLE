@@ -10,6 +10,8 @@ const currentProjectMeta = document.getElementById("currentProjectMeta");
 const projectCount = document.getElementById("projectCount");
 const topicCount = document.getElementById("topicCount");
 const topicList = document.getElementById("topicList");
+const connectionState = document.getElementById("connectionState");
+const tokenState = document.getElementById("tokenState");
 const userName = document.getElementById("userName");
 const userEmail = document.getElementById("userEmail");
 const permissionState = document.getElementById("permissionState");
@@ -21,6 +23,7 @@ let projects = [];
 let currentProjectId = "";
 let selectedJsonData = null;
 let selectedTopicsData = [];
+let assigneeDirectory = new Map();
 
 const TOPICS_REGION_HOSTS = {
   northamerica: "https://open11.connect.trimble.com",
@@ -33,6 +36,19 @@ const COMPLETED_TOPIC_STATUS_KEYS = new Set(["resolved", "done", "closed"]);
 function setStatus(message, type = "info") {
   statusMessage.textContent = message;
   statusMessage.className = `status-message ${type}`;
+}
+
+function setConnectionState(state) {
+  connectionState.textContent = state;
+}
+
+function setTokenState(state) {
+  tokenState.textContent = state;
+}
+
+function setUserIdentity(profile) {
+  userName.textContent = profile?.name || profile?.displayName || profile?.fullName || "Nao identificado";
+  userEmail.textContent = profile?.email || profile?.mail || "Email nao disponivel";
 }
 
 function setJson(data) {
@@ -92,6 +108,91 @@ function normalizeProjects(payload) {
   }));
 }
 
+function normalizeTopicAssignee(topic, directory = new Map()) {
+  const normalizeAssigneeEntry = (item, forcedType = "") => {
+    if (!item) {
+      return [];
+    }
+
+    if (typeof item === "string" || typeof item === "number") {
+      const value = String(item).trim();
+      if (!value) {
+        return [];
+      }
+
+      const resolvedValue = directory.get(value) || value;
+      return [forcedType ? `${forcedType}: ${resolvedValue}` : resolvedValue];
+    }
+
+    if (Array.isArray(item)) {
+      return item.flatMap((entry) => normalizeAssigneeEntry(entry, forcedType));
+    }
+
+    if (typeof item !== "object") {
+      return [];
+    }
+
+    if (Array.isArray(item.users) || Array.isArray(item.groups)) {
+      return [
+        ...normalizeAssigneeEntry(item.users || [], "USER"),
+        ...normalizeAssigneeEntry(item.groups || [], "GROUP"),
+      ];
+    }
+
+    if (item.member) {
+      return normalizeAssigneeEntry(item.member, forcedType);
+    }
+
+    const type = String(
+      forcedType ||
+        item.type ||
+        item.assignee_type ||
+        item.assigneeType ||
+        item.memberType ||
+        item.kind ||
+        ""
+    )
+      .trim()
+      .toUpperCase();
+    const label =
+      item.name ||
+      item.display_name ||
+      item.displayName ||
+      item.email ||
+      item.mail ||
+      item.userName ||
+      item.groupName ||
+      item.title ||
+      item.id ||
+      item.uuid ||
+      item.userId ||
+      item.groupId ||
+      "";
+    const normalizedLabel = String(label).trim();
+    const labelFromDirectory =
+      directory.get(item.id) ||
+      directory.get(item.uuid) ||
+      directory.get(item.userId) ||
+      directory.get(item.groupId) ||
+      "";
+    const resolvedLabel = labelFromDirectory || normalizedLabel;
+
+    if (!resolvedLabel) {
+      return [];
+    }
+
+    return [type ? `${type}: ${resolvedLabel}` : resolvedLabel];
+  };
+
+  const normalizedAssignees = [
+    ...normalizeAssigneeEntry(topic.assigned_to),
+    ...normalizeAssigneeEntry(topic.assignee),
+    ...normalizeAssigneeEntry(topic.assignees),
+  ].filter((value) => Boolean(value));
+
+  return normalizedAssignees.length ? Array.from(new Set(normalizedAssignees)).join(", ") : "-";
+}
+
 function normalizeTopics(payload) {
   const items = Array.isArray(payload)
     ? payload
@@ -105,12 +206,79 @@ function normalizeTopics(payload) {
     type: topic.topic_type || topic.type || "-",
     priority: topic.priority || "-",
     dueDate: topic.due_date || "",
+    createdAt: topic.creation_date || "",
     labels: Array.isArray(topic.labels) ? topic.labels : [],
+    assignee: normalizeTopicAssignee(topic, assigneeDirectory),
     owner: topic.assigned_to || topic.creation_author || "-",
     createdBy: topic.creation_author || "-",
     updatedAt: topic.modified_date || topic.creation_date || "",
     raw: topic,
   }));
+}
+
+function extractAssigneeDirectoryEntries(payload, directory = new Map()) {
+  if (!payload) {
+    return directory;
+  }
+
+  const queue = Array.isArray(payload) ? [...payload] : [payload];
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+
+    const candidateId = current.id || current.uuid || current.userId || current.groupId || null;
+    const candidateName =
+      current.name ||
+      current.displayName ||
+      current.display_name ||
+      current.title ||
+      current.email ||
+      current.mail ||
+      null;
+
+    if (candidateId && candidateName) {
+      directory.set(String(candidateId), String(candidateName));
+    }
+
+    Object.values(current).forEach((value) => {
+      if (value && typeof value === "object") {
+        queue.push(value);
+      }
+    });
+  }
+
+  return directory;
+}
+
+async function loadAssigneeDirectory(projectId) {
+  if (!projectId || !accessToken) {
+    assigneeDirectory = new Map();
+    return;
+  }
+
+  const candidates = [
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}?fullyLoaded=true`,
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}/users`,
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}/groups`,
+    `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}/members`,
+  ];
+
+  const directory = new Map();
+  await Promise.all(
+    candidates.map(async (url) => {
+      try {
+        const payload = await fetchJson(url, accessToken);
+        extractAssigneeDirectoryEntries(payload, directory);
+      } catch (_error) {
+        // endpoint opcional: ignora se nao estiver disponivel
+      }
+    })
+  );
+
+  assigneeDirectory = directory;
 }
 
 function formatTopicDate(value) {
@@ -199,6 +367,8 @@ function buildExcelWorksheetXml(name, items) {
     "Status",
     "Tipo",
     "Prioridade",
+    "Atribuido a",
+    "Criado em",
     "Vencimento",
     "Etiquetas",
     "Responsavel",
@@ -209,6 +379,8 @@ function buildExcelWorksheetXml(name, items) {
     topic.status,
     topic.type,
     topic.priority,
+    topic.assignee,
+    formatTopicDate(topic.createdAt),
     formatTopicDate(topic.dueDate),
     topic.labels.join(", "),
     topic.owner,
@@ -298,6 +470,8 @@ function buildTopicsTable(title, items) {
     "Status",
     "Tipo",
     "Prioridade",
+    "Atribuido a",
+    "Criado em",
     "Vencimento",
     "Etiquetas",
     "Responsavel",
@@ -348,6 +522,12 @@ function buildTopicsTable(title, items) {
     priorityBadge.textContent = topic.priority;
     priorityCell.appendChild(priorityBadge);
 
+    const assigneeCell = document.createElement("td");
+    assigneeCell.textContent = topic.assignee;
+
+    const createdAtCell = document.createElement("td");
+    createdAtCell.textContent = formatTopicDate(topic.createdAt);
+
     const dueDateCell = document.createElement("td");
     dueDateCell.textContent = formatTopicDate(topic.dueDate);
 
@@ -377,6 +557,8 @@ function buildTopicsTable(title, items) {
       statusCell,
       typeCell,
       priorityCell,
+      assigneeCell,
+      createdAtCell,
       dueDateCell,
       labelsCell,
       ownerCell
@@ -512,6 +694,7 @@ async function loadTopics(project) {
   topicList.innerHTML = '<p class="empty-state">Carregando topicos...</p>';
 
   try {
+    await loadAssigneeDirectory(project.id);
     const topicsResponse = await fetchBcfTopics(project.id, accessToken, project.raw || project);
     const topics = normalizeTopics(topicsResponse.payload);
 
@@ -573,17 +756,20 @@ async function requestAccessToken() {
 
   if (result === "pending") {
     permissionState.textContent = "Pendente";
+    setTokenState("Pendente");
     setStatus("Aguardando permissao do usuario.");
     return;
   }
 
   if (result === "denied") {
     permissionState.textContent = "Negado";
+    setTokenState("Negado");
     throw new Error("Permissao do token negada.");
   }
 
   accessToken = String(result);
   permissionState.textContent = "Concedido";
+  setTokenState("Concedido");
   setStatus("Token recebido.");
 }
 
@@ -616,23 +802,42 @@ async function loadProjects() {
   }
 }
 
+async function loadCurrentUserProfile() {
+  if (!accessToken) {
+    return;
+  }
+
+  try {
+    const profile = await fetchJson("https://app.connect.trimble.com/tc/api/2.0/users/me", accessToken);
+    setUserIdentity(profile);
+  } catch (_error) {
+    setUserIdentity(null);
+  }
+}
+
 async function initialize() {
   if (!window.TrimbleConnectWorkspace?.connect) {
+    setConnectionState("Indisponivel");
     setStatus("Workspace API indisponivel.", "error");
     return;
   }
 
+  setConnectionState("Conectando");
   workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
     if (event === "extension.accessToken" && typeof args?.data === "string") {
       accessToken = args.data;
+      setTokenState("Concedido");
+      await loadCurrentUserProfile();
       await loadProjects();
     }
   });
+  setConnectionState("Conectado");
 
   await loadCurrentProject();
   await requestAccessToken();
 
   if (accessToken) {
+    await loadCurrentUserProfile();
     await loadProjects();
   }
 }
@@ -647,6 +852,7 @@ refreshButton.addEventListener("click", async () => {
     }
 
     if (accessToken) {
+      await loadCurrentUserProfile();
       await loadProjects();
     }
   } catch (error) {
