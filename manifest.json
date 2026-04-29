@@ -1,0 +1,7 @@
+{
+  "title": "Projetos Trimble Connect",
+  "icon": "https://components.connect.trimble.com/trimble-connect-workspace-api/favicon.ico",
+  "url": "https://SEU-HOST-AQUI/index.html",
+  "description": "Extensao de projeto que reutiliza a sessao do Trimble Connect e lista os projetos do usuario.",
+  "enabled": true
+}
