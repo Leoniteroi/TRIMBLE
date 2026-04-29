@@ -135,7 +135,9 @@ Para cada host, o app tenta dois formatos:
 - `type`
 - `priority`
 - `dueDate`
+- `createdAt`
 - `labels`
+- `assignee`
 - `owner`
 - `createdBy`
 - `updatedAt`

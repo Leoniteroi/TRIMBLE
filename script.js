@@ -24,9 +24,53 @@ let currentProjectId = "";
 let selectedJsonData = null;
 let selectedTopicsData = [];
 let assigneeDirectory = new Map();
+let activeProjectButton = null;
+let topicsLoadRequestId = 0;
 
 const { prioritizeTopicHostsByProject, buildBcfTopicEndpointCandidates } = window.BcfEndpoints;
 const COMPLETED_TOPIC_STATUS_KEYS = new Set(["resolved", "done", "closed"]);
+const TOPIC_TABLE_COLUMNS = [
+  { key: "code", label: "Codigo" },
+  { key: "title", label: "Titulo" },
+  { key: "status", label: "Status" },
+  { key: "type", label: "Tipo" },
+  { key: "priority", label: "Prioridade" },
+  { key: "assignee", label: "Atribuido a" },
+  { key: "createdAt", label: "Criado em" },
+  { key: "dueDate", label: "Vencimento" },
+  { key: "labels", label: "Etiquetas" },
+  { key: "owner", label: "Responsavel" },
+];
+const TOPIC_DATE_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+const assigneeDirectoryCache = new Map();
+
+function getStatusKey(state) {
+  return String(state || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function setVisualState(element, state) {
+  const chip = element.closest(".status-chip");
+  const statusKey = getStatusKey(state);
+
+  element.textContent = state;
+
+  if (!chip) {
+    return;
+  }
+
+  chip.className = "status-chip";
+  chip.classList.add(`status-chip-${statusKey}`);
+  chip.dataset.state = statusKey;
+  chip.setAttribute("aria-label", `${chip.querySelector(".status-label")?.textContent || "Status"}: ${state}`);
+}
 
 function setStatus(message, type = "info") {
   statusMessage.textContent = message;
@@ -34,11 +78,21 @@ function setStatus(message, type = "info") {
 }
 
 function setConnectionState(state) {
-  connectionState.textContent = state;
+  setVisualState(connectionState, state);
 }
 
 function setTokenState(state) {
-  tokenState.textContent = state;
+  setVisualState(tokenState, state);
+}
+
+function setAccessToken(token) {
+  const nextToken = String(token || "");
+
+  if (nextToken !== accessToken) {
+    assigneeDirectoryCache.clear();
+  }
+
+  accessToken = nextToken;
 }
 
 function setUserIdentity(profile) {
@@ -161,27 +215,92 @@ function normalizeTopicAssignee(topic, directory = new Map()) {
   return normalizedAssignees.length ? Array.from(new Set(normalizedAssignees)).join(", ") : "-";
 }
 
+function normalizeTopicTextValue(value, fallback = "-") {
+  if (value == null || value === "") {
+    return fallback;
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const normalizedValue = String(value).trim();
+    return normalizedValue || fallback;
+  }
+
+  if (Array.isArray(value)) {
+    const normalizedItems = value
+      .map((item) => normalizeTopicTextValue(item, ""))
+      .filter(Boolean);
+    return normalizedItems.length ? Array.from(new Set(normalizedItems)).join(", ") : fallback;
+  }
+
+  if (typeof value === "object") {
+    return normalizeTopicTextValue(
+      value.name ||
+        value.display_name ||
+        value.displayName ||
+        value.title ||
+        value.label ||
+        value.value ||
+        value.email ||
+        value.mail ||
+        value.id ||
+        value.uuid,
+      fallback
+    );
+  }
+
+  return fallback;
+}
+
+function normalizeTopicLabels(topic) {
+  const labels = topic.labels || topic.label || topic.tags || topic.tag || [];
+  const normalizedLabels = Array.isArray(labels)
+    ? labels.map((label) => normalizeTopicTextValue(label, "")).filter(Boolean)
+    : String(labels)
+        .split(",")
+        .map((label) => label.trim())
+        .filter(Boolean);
+
+  return Array.from(new Set(normalizedLabels));
+}
+
 function normalizeTopics(payload) {
   const items = Array.isArray(payload)
     ? payload
     : payload?.data || payload?.items || payload?.topics || payload?.results || [];
 
-  return items.map((topic) => ({
-    id: topic.topic_id || topic.id || topic.guid || "",
-    code: topic.server_assigned_id || topic.topic_id || topic.id || topic.guid || "-",
-    title: topic.title || topic.topic_title || topic.description || "Topico sem titulo",
-    status: topic.topic_status || topic.status || "-",
-    type: topic.topic_type || topic.type || "-",
-    priority: topic.priority || "-",
-    dueDate: topic.due_date || "",
-    createdAt: topic.creation_date || topic.created_at || topic.createdAt || topic.create_date || "",
-    labels: Array.isArray(topic.labels) ? topic.labels : [],
-    assignee: normalizeTopicAssignee(topic, assigneeDirectory),
-    owner: topic.assigned_to || topic.creation_author || "-",
-    createdBy: topic.creation_author || "-",
-    updatedAt: topic.modified_date || topic.creation_date || "",
-    raw: topic,
-  }));
+  return items.map((topic) => {
+    const assignee = normalizeTopicAssignee(topic, assigneeDirectory);
+    const createdBy = normalizeTopicTextValue(
+      topic.creation_author || topic.created_by || topic.createdBy || topic.author,
+      "-"
+    );
+
+    return {
+      id: normalizeTopicTextValue(topic.topic_id || topic.id || topic.guid, ""),
+      code: normalizeTopicTextValue(
+        topic.server_assigned_id || topic.topic_id || topic.id || topic.guid,
+        "-"
+      ),
+      title: normalizeTopicTextValue(topic.title || topic.topic_title || topic.description, "Topico sem titulo"),
+      status: normalizeTopicTextValue(topic.topic_status || topic.status, "-"),
+      type: normalizeTopicTextValue(topic.topic_type || topic.type, "-"),
+      priority: normalizeTopicTextValue(topic.priority, "-"),
+      dueDate: topic.due_date || topic.dueDate || topic.due_at || "",
+      createdAt: topic.creation_date || topic.created_at || topic.createdAt || topic.create_date || "",
+      labels: normalizeTopicLabels(topic),
+      assignee,
+      owner: normalizeTopicTextValue(topic.owner || topic.responsible || topic.responsavel, createdBy),
+      createdBy,
+      updatedAt:
+        topic.modified_date ||
+        topic.modified_at ||
+        topic.updated_at ||
+        topic.updatedAt ||
+        topic.creation_date ||
+        "",
+      raw: topic,
+    };
+  });
 }
 
 function extractAssigneeDirectoryEntries(payload, directory = new Map()) {
@@ -227,6 +346,11 @@ async function loadAssigneeDirectory(projectId) {
     return;
   }
 
+  if (assigneeDirectoryCache.has(projectId)) {
+    assigneeDirectory = assigneeDirectoryCache.get(projectId);
+    return;
+  }
+
   const candidates = [
     `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}?fullyLoaded=true`,
     `https://app.connect.trimble.com/tc/api/2.0/projects/${encodeURIComponent(projectId)}/users`,
@@ -247,6 +371,7 @@ async function loadAssigneeDirectory(projectId) {
   );
 
   assigneeDirectory = directory;
+  assigneeDirectoryCache.set(projectId, directory);
 }
 
 function formatTopicDate(value) {
@@ -259,11 +384,7 @@ function formatTopicDate(value) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
+  return TOPIC_DATE_FORMATTER.format(date);
 }
 
 function slugifyTopicValue(value) {
@@ -302,15 +423,17 @@ function sortTopicsByDueDate(items) {
 
 function splitTopicsByCompletion(items) {
   const sortedTopics = sortTopicsByDueDate(items);
+  const activeTopics = [];
+  const completedTopics = [];
 
-  return {
-    activeTopics: sortedTopics.filter(
-      (topic) => !COMPLETED_TOPIC_STATUS_KEYS.has(getTopicStatusKey(topic.status))
-    ),
-    completedTopics: sortedTopics.filter((topic) =>
-      COMPLETED_TOPIC_STATUS_KEYS.has(getTopicStatusKey(topic.status))
-    ),
-  };
+  sortedTopics.forEach((topic) => {
+    const target = COMPLETED_TOPIC_STATUS_KEYS.has(getTopicStatusKey(topic.status))
+      ? completedTopics
+      : activeTopics;
+    target.push(topic);
+  });
+
+  return { activeTopics, completedTopics };
 }
 
 function escapeSpreadsheetXml(value) {
@@ -328,34 +451,25 @@ function sanitizeWorksheetName(value) {
     .slice(0, 31);
 }
 
-function buildExcelWorksheetXml(name, items) {
-  const columns = [
-    "Codigo",
-    "Titulo",
-    "Status",
-    "Tipo",
-    "Prioridade",
-    "Atribuido a",
-    "Criado em",
-    "Vencimento",
-    "Etiquetas",
-    "Responsavel",
-  ];
-  const rows = items.map((topic) => [
-    topic.code,
-    topic.title,
-    topic.status,
-    topic.type,
-    topic.priority,
-    topic.assignee,
-    formatTopicDate(topic.createdAt),
-    formatTopicDate(topic.dueDate),
-    topic.labels.join(", "),
-    topic.owner,
-  ]);
+function formatTopicCellValue(topic, key) {
+  if (key === "createdAt" || key === "dueDate") {
+    return formatTopicDate(topic[key]);
+  }
 
-  const headerXml = `<Row ss:StyleID="header">${columns
-    .map((column) => `<Cell><Data ss:Type="String">${escapeSpreadsheetXml(column)}</Data></Cell>`)
+  if (key === "labels") {
+    return topic.labels.length ? topic.labels.join(", ") : "-";
+  }
+
+  return topic[key] || "-";
+}
+
+function buildExcelWorksheetXml(name, items) {
+  const rows = items.map((topic) =>
+    TOPIC_TABLE_COLUMNS.map(({ key }) => formatTopicCellValue(topic, key))
+  );
+
+  const headerXml = `<Row ss:StyleID="header">${TOPIC_TABLE_COLUMNS
+    .map(({ label }) => `<Cell><Data ss:Type="String">${escapeSpreadsheetXml(label)}</Data></Cell>`)
     .join("")}</Row>`;
   const rowsXml = rows
     .map(
@@ -409,17 +523,19 @@ function exportTopicsToExcel() {
 function buildTopicsTable(title, items) {
   const section = document.createElement("section");
   section.className = "topic-table-section";
+  const sectionFragment = document.createDocumentFragment();
 
   const heading = document.createElement("h3");
   heading.className = "topic-table-heading";
   heading.textContent = `${title} (${items.length})`;
-  section.appendChild(heading);
+  sectionFragment.appendChild(heading);
 
   if (!items.length) {
     const emptyState = document.createElement("p");
     emptyState.className = "empty-state";
     emptyState.textContent = "Nenhum topico nesta secao.";
-    section.appendChild(emptyState);
+    sectionFragment.appendChild(emptyState);
+    section.appendChild(sectionFragment);
     return section;
   }
 
@@ -432,18 +548,7 @@ function buildTopicsTable(title, items) {
 
   const thead = document.createElement("thead");
   const headerRow = document.createElement("tr");
-  [
-    "Codigo",
-    "Titulo",
-    "Status",
-    "Tipo",
-    "Prioridade",
-    "Atribuido a",
-    "Criado em",
-    "Vencimento",
-    "Etiquetas",
-    "Responsavel",
-  ].forEach((label) => {
+  TOPIC_TABLE_COLUMNS.forEach(({ label }) => {
     const th = document.createElement("th");
     th.scope = "col";
     th.textContent = label;
@@ -452,6 +557,7 @@ function buildTopicsTable(title, items) {
   thead.appendChild(headerRow);
 
   const tbody = document.createElement("tbody");
+  const rowsFragment = document.createDocumentFragment();
 
   items.forEach((topic) => {
     const row = document.createElement("tr");
@@ -494,9 +600,11 @@ function buildTopicsTable(title, items) {
     assigneeCell.textContent = topic.assignee;
 
     const createdAtCell = document.createElement("td");
+    createdAtCell.className = "topic-date";
     createdAtCell.textContent = formatTopicDate(topic.createdAt);
 
     const dueDateCell = document.createElement("td");
+    dueDateCell.className = "topic-date";
     dueDateCell.textContent = formatTopicDate(topic.dueDate);
 
     const labelsCell = document.createElement("td");
@@ -531,12 +639,14 @@ function buildTopicsTable(title, items) {
       labelsCell,
       ownerCell
     );
-    tbody.appendChild(row);
+    rowsFragment.appendChild(row);
   });
 
+  tbody.appendChild(rowsFragment);
   table.append(thead, tbody);
   tableWrapper.appendChild(table);
-  section.appendChild(tableWrapper);
+  sectionFragment.appendChild(tableWrapper);
+  section.appendChild(sectionFragment);
 
   return section;
 }
@@ -565,38 +675,47 @@ function formatCount(value, singular, plural) {
 function renderProjects() {
   projectList.innerHTML = "";
   projectCount.textContent = formatCount(projects.length, "projeto", "projetos");
+  activeProjectButton = null;
 
   if (!projects.length) {
     projectList.innerHTML = '<p class="empty-state">Nenhum projeto encontrado.</p>';
     return;
   }
 
+  if (!projects.some((project) => project.id === selectedProjectId)) {
+    selectedProjectId = projects[0].id;
+  }
+
+  const fragment = document.createDocumentFragment();
+
   projects.forEach((project, index) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "item";
+    button.className = "project-item";
 
     if (project.id === selectedProjectId || (!selectedProjectId && index === 0)) {
-      selectedProjectId = project.id;
       button.classList.add("active");
+      activeProjectButton = button;
     }
 
     const title = document.createElement("span");
-    title.className = "title";
+    title.className = "project-title";
     title.textContent = project.name;
 
     button.append(title);
     button.addEventListener("click", async () => {
       selectedProjectId = project.id;
-      document.querySelectorAll("#projectList .item").forEach((item) => {
-        item.classList.toggle("active", item === button);
-      });
+      activeProjectButton?.classList.remove("active");
+      button.classList.add("active");
+      activeProjectButton = button;
       setJson(project.raw);
       await loadTopics(project);
     });
 
-    projectList.appendChild(button);
+    fragment.appendChild(button);
   });
+
+  projectList.appendChild(fragment);
 }
 
 function renderTopics(items) {
@@ -610,9 +729,11 @@ function renderTopics(items) {
   }
 
   const { activeTopics, completedTopics } = splitTopicsByCompletion(items);
+  const fragment = document.createDocumentFragment();
 
-  topicList.appendChild(buildTopicsTable("Topicos em andamento", activeTopics));
-  topicList.appendChild(buildTopicsTable("Topicos concluidos", completedTopics));
+  fragment.appendChild(buildTopicsTable("Topicos em andamento", activeTopics));
+  fragment.appendChild(buildTopicsTable("Topicos concluidos", completedTopics));
+  topicList.appendChild(fragment);
 }
 
 async function fetchBcfTopics(projectId, token, projectRaw = {}) {
@@ -647,6 +768,8 @@ async function fetchBcfTopics(projectId, token, projectRaw = {}) {
 }
 
 async function loadTopics(project) {
+  const requestId = ++topicsLoadRequestId;
+
   if (!project?.id) {
     setStatus("Projeto selecionado invalido.", "error");
     setTopicsData([]);
@@ -656,7 +779,7 @@ async function loadTopics(project) {
   }
 
   if (!accessToken) {
-    setTokenState("Indisponivel");
+    setTokenState("Nao concedido");
     permissionState.textContent = "Nao concedido";
     setStatus("Token de acesso nao disponivel.", "error");
     setTopicsData([]);
@@ -674,6 +797,10 @@ async function loadTopics(project) {
     const topicsResponse = await fetchBcfTopics(project.id, accessToken, project.raw || project);
     const topics = normalizeTopics(topicsResponse.payload);
 
+    if (requestId !== topicsLoadRequestId) {
+      return;
+    }
+
     renderTopics(topics);
     setJson({
       projectId: project.id,
@@ -683,6 +810,10 @@ async function loadTopics(project) {
     });
     setStatus("Topicos carregados. Clique em Exibir topicos para ver a listagem.");
   } catch (error) {
+    if (requestId !== topicsLoadRequestId) {
+      return;
+    }
+
     setTopicsData([]);
     renderTopics([]);
     setJson({
@@ -743,7 +874,7 @@ async function requestAccessToken() {
     throw new Error("Permissao do token negada.");
   }
 
-  accessToken = String(result);
+  setAccessToken(result);
   permissionState.textContent = "Concedido";
   setTokenState("Concedido");
   setStatus("Token recebido.");
@@ -806,7 +937,7 @@ async function initialize() {
   permissionState.textContent = "Pendente";
   workspaceApi = await window.TrimbleConnectWorkspace.connect(window.parent, async (event, args) => {
     if (event === "extension.accessToken" && typeof args?.data === "string") {
-      accessToken = args.data;
+      setAccessToken(args.data);
       permissionState.textContent = "Concedido";
       setTokenState("Concedido");
       setStatus("Token recebido por evento da extensao.", "success");
@@ -887,6 +1018,14 @@ exportTopicsButton.addEventListener("click", () => {
 });
 
 initialize().catch((error) => {
+  if (!workspaceApi) {
+    setConnectionState("Indisponivel");
+  }
+
+  if (["Nao solicitado", "Pendente"].includes(tokenState.textContent)) {
+    setTokenState("Indisponivel");
+  }
+
   setStatus(error.message, "error");
   setJson(error.stack || error.message);
 });
