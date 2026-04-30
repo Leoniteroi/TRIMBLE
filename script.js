@@ -915,13 +915,8 @@ async function loadTopics(project) {
 
     syncRuntimeFrontendState();
     renderTopics(topics);
-    setJson({
-      projectId: project.id,
-      bcfEndpoint: topicsResponse.endpoint,
-      topics,
-      raw: topicsResponse.payload,
-    });
-    setStatus("Topicos carregados. Clique em Exibir topicos para ver a listagem.");
+    setJson(topicsResponse.payload);
+    setStatus(`Topicos carregados via BCF ${topicsResponse.endpoint.version}. JSON bruto disponivel.`);
   } catch (error) {
     if (requestId !== topicsLoadRequestId) {
       return;
