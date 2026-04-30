@@ -140,7 +140,7 @@ Quando os topicos carregam com sucesso, o painel `JSON selecionado` recebe um pa
 - `projectId`: projeto consultado.
 - `bcfEndpoint`: endpoint de listagem que respondeu.
 - `rawTopicsList`: payload bruto de `/topics`.
-- `rawTopicDetails`: pacote bruto por topico contendo `/topics/{guid}`, `/viewpoints`, `/comments` e `/events`, com URL e erro individual por recurso quando alguma consulta falhar.
+- `rawTopicDetails`: pacote bruto por topico contendo `/topics/{guid}` e `/comments`, com URL e erro individual por recurso quando alguma consulta falhar.
 
 Os dados normalizados sao usados apenas para tabela e exportacao.
 

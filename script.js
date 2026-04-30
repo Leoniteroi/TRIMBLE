@@ -946,14 +946,10 @@ async function fetchBcfTopicDetails(topicsPayload, topicsEndpoint, token) {
     }
 
     const detailUrl = buildTopicResourceUrl(topicsEndpoint, guid);
-    const viewpointsUrl = buildTopicResourceUrl(topicsEndpoint, guid, "viewpoints");
     const commentsUrl = buildTopicResourceUrl(topicsEndpoint, guid, "comments");
-    const eventsUrl = buildTopicResourceUrl(topicsEndpoint, guid, "events");
-    const [detail, viewpoints, comments, events] = await Promise.all([
+    const [detail, comments] = await Promise.all([
       fetchBcfResource(detailUrl, token),
-      fetchBcfResource(viewpointsUrl, token),
       fetchBcfResource(commentsUrl, token),
-      fetchBcfResource(eventsUrl, token),
     ]);
 
     return {
@@ -964,9 +960,7 @@ async function fetchBcfTopicDetails(topicsPayload, topicsEndpoint, token) {
       error: detail.error,
       resources: {
         detail,
-        viewpoints,
         comments,
-        events,
       },
     };
   });
