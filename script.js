@@ -888,11 +888,28 @@ function getTopicGuid(topic) {
   return topic?.guid || topic?.topic_guid || topic?.topic_id || topic?.id || "";
 }
 
-function buildTopicDetailUrl(topicsEndpoint, topicGuid) {
+function buildTopicResourceUrl(topicsEndpoint, topicGuid, resourcePath = "") {
   const url = new URL(topicsEndpoint.url);
+  const suffix = resourcePath ? `/${resourcePath.replace(/^\/+/, "")}` : "";
   url.search = "";
-  url.pathname = `${url.pathname.replace(/\/+$/, "")}/${encodeURIComponent(topicGuid)}`;
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/${encodeURIComponent(topicGuid)}${suffix}`;
   return url.toString();
+}
+
+async function fetchBcfResource(url, token) {
+  try {
+    return {
+      url,
+      payload: await fetchJson(url, token),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      url,
+      payload: null,
+      error: error.message,
+    };
+  }
 }
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -928,25 +945,30 @@ async function fetchBcfTopicDetails(topicsPayload, topicsEndpoint, token) {
       };
     }
 
-    const detailUrl = buildTopicDetailUrl(topicsEndpoint, guid);
+    const detailUrl = buildTopicResourceUrl(topicsEndpoint, guid);
+    const viewpointsUrl = buildTopicResourceUrl(topicsEndpoint, guid, "viewpoints");
+    const commentsUrl = buildTopicResourceUrl(topicsEndpoint, guid, "comments");
+    const eventsUrl = buildTopicResourceUrl(topicsEndpoint, guid, "events");
+    const [detail, viewpoints, comments, events] = await Promise.all([
+      fetchBcfResource(detailUrl, token),
+      fetchBcfResource(viewpointsUrl, token),
+      fetchBcfResource(commentsUrl, token),
+      fetchBcfResource(eventsUrl, token),
+    ]);
 
-    try {
-      return {
-        index,
-        guid,
-        detailUrl,
-        detail: await fetchJson(detailUrl, token),
-        error: null,
-      };
-    } catch (error) {
-      return {
-        index,
-        guid,
-        detailUrl,
-        detail: null,
-        error: error.message,
-      };
-    }
+    return {
+      index,
+      guid,
+      detailUrl,
+      detail: detail.payload,
+      error: detail.error,
+      resources: {
+        detail,
+        viewpoints,
+        comments,
+        events,
+      },
+    };
   });
 }
 
