@@ -22,7 +22,7 @@ O app e uma extensao front-end estatica, sem processo de build. Ele roda dentro 
 - Normaliza campos de topicos vindos em formatos diferentes.
 - Exibe topicos em andamento e concluidos em tabelas separadas.
 - Mostra data de criacao e vencimento com o mesmo estilo visual.
-- Mostra o retorno bruto da API BCF no painel JSON para analise de desenvolvimento.
+- Mostra um pacote JSON de desenvolvimento com a listagem BCF bruta e o detalhe bruto de cada topico por `guid`.
 - Exporta topicos para `.xls` com duas abas.
 - Atualiza visualmente conexao, token, permissao, usuario e projeto selecionado.
 
@@ -63,7 +63,7 @@ Dependencias externas em tempo de execucao:
 8. O projeto selecionado atualiza o card do painel esquerdo.
 9. `loadTopics(project)` busca topicos BCF.
 10. Os topicos sao normalizados, ordenados, separados e renderizados.
-11. O usuario pode exibir o JSON bruto retornado pelo BCF ou exportar Excel.
+11. O usuario pode exibir o JSON bruto enriquecido com `/topics/{guid}` ou exportar Excel.
 
 ## Estado do Frontend
 
@@ -135,7 +135,14 @@ Formatos tentados:
 
 `fetchBcfTopics()` prioriza hosts pela regiao do projeto e tenta fallback entre hosts e versoes.
 
-Quando os topicos carregam com sucesso, o painel `JSON selecionado` recebe exatamente o payload bruto retornado pelo endpoint BCF usado. Os dados normalizados sao usados apenas para tabela e exportacao.
+Quando os topicos carregam com sucesso, o painel `JSON selecionado` recebe um pacote de desenvolvimento:
+
+- `projectId`: projeto consultado.
+- `bcfEndpoint`: endpoint de listagem que respondeu.
+- `rawTopicsList`: payload bruto de `/topics`.
+- `rawTopicDetails`: resultado bruto de `/topics/{guid}` para cada topico encontrado, incluindo `detailUrl` e erro individual quando a consulta detalhada falhar.
+
+Os dados normalizados sao usados apenas para tabela e exportacao.
 
 ## Campos Normalizados de Topicos
 
@@ -223,7 +230,7 @@ Melhorias implementadas:
 - `Atualizar dados`: recarrega projeto do host, token se necessario, usuario e projetos.
 - `Exibir topicos`: alterna visibilidade das tabelas.
 - `Exportar Excel`: baixa os topicos carregados.
-- `Exibir JSON`: alterna visibilidade do retorno bruto BCF carregado para o projeto.
+- `Exibir JSON`: alterna visibilidade do pacote bruto BCF com listagem e detalhes por `guid`.
 
 Os botoes dependentes de dados ficam desabilitados quando nao ha topicos ou JSON disponivel.
 

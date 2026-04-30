@@ -24,7 +24,7 @@ Arquivos principais:
 7. `loadProjects()` normaliza a lista de projetos e define o projeto selecionado.
 8. `setActiveProjectState(project)` atualiza o card do painel esquerdo com o projeto selecionado na UI.
 9. `loadTopics(project)` carrega os topicos BCF, normaliza os campos e renderiza a tabela.
-10. O usuario pode exibir o JSON bruto retornado pelo BCF ou exportar para Excel.
+10. O usuario pode exibir o JSON bruto enriquecido com detalhes por `guid` ou exportar para Excel.
 
 ## 3. Estado do Frontend
 
@@ -112,7 +112,14 @@ Para cada host, o app tenta:
 
 `fetchBcfTopics()` tenta os endpoints em ordem priorizada pela localizacao do projeto e consolida as falhas quando nenhum endpoint responde com sucesso.
 
-Ao carregar topicos com sucesso, `setJson(topicsResponse.payload)` envia ao painel JSON exatamente o payload bruto retornado pelo BCF. A normalizacao acontece em paralelo apenas para renderizacao da tabela e exportacao.
+Ao carregar topicos com sucesso, o painel JSON recebe um pacote de desenvolvimento:
+
+- `projectId`: projeto consultado.
+- `bcfEndpoint`: endpoint de listagem que respondeu.
+- `rawTopicsList`: payload bruto de `/topics`.
+- `rawTopicDetails`: resultado de `/topics/{guid}` para cada topico encontrado.
+
+Cada item de `rawTopicDetails` contem `index`, `guid`, `detailUrl`, `detail` e `error`. A normalizacao acontece em paralelo apenas para renderizacao da tabela e exportacao.
 
 ## 8. Normalizacao de Topicos
 

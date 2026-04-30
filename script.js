@@ -55,6 +55,7 @@ const TOPIC_DATE_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
   month: "2-digit",
   year: "numeric",
 });
+const TOPIC_DETAIL_CONCURRENCY = 6;
 const assigneeDirectoryCache = new Map();
 
 function getStatusKey(state) {
@@ -877,6 +878,78 @@ async function fetchBcfTopics(projectId, token, projectRaw = {}) {
   throw new Error(`Nenhum endpoint BCF retornou topicos. Tentativas: ${message}`);
 }
 
+function getRawTopicsItems(payload) {
+  return Array.isArray(payload)
+    ? payload
+    : payload?.data || payload?.items || payload?.topics || payload?.results || [];
+}
+
+function getTopicGuid(topic) {
+  return topic?.guid || topic?.topic_guid || topic?.topic_id || topic?.id || "";
+}
+
+function buildTopicDetailUrl(topicsEndpoint, topicGuid) {
+  const url = new URL(topicsEndpoint.url);
+  url.search = "";
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/${encodeURIComponent(topicGuid)}`;
+  return url.toString();
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+async function fetchBcfTopicDetails(topicsPayload, topicsEndpoint, token) {
+  const items = getRawTopicsItems(topicsPayload);
+
+  return mapWithConcurrency(items, TOPIC_DETAIL_CONCURRENCY, async (topic, index) => {
+    const guid = getTopicGuid(topic);
+
+    if (!guid) {
+      return {
+        index,
+        guid: "",
+        detailUrl: "",
+        detail: null,
+        error: "Topico sem guid/id para consulta detalhada.",
+      };
+    }
+
+    const detailUrl = buildTopicDetailUrl(topicsEndpoint, guid);
+
+    try {
+      return {
+        index,
+        guid,
+        detailUrl,
+        detail: await fetchJson(detailUrl, token),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        index,
+        guid,
+        detailUrl,
+        detail: null,
+        error: error.message,
+      };
+    }
+  });
+}
+
 async function loadTopics(project) {
   const requestId = ++topicsLoadRequestId;
 
@@ -908,6 +981,11 @@ async function loadTopics(project) {
     await loadAssigneeDirectory(project.id);
     const topicsResponse = await fetchBcfTopics(project.id, accessToken, project.raw || project);
     const topics = normalizeTopics(topicsResponse.payload);
+    const topicDetails = await fetchBcfTopicDetails(
+      topicsResponse.payload,
+      topicsResponse.endpoint,
+      accessToken
+    );
 
     if (requestId !== topicsLoadRequestId) {
       return;
@@ -915,8 +993,15 @@ async function loadTopics(project) {
 
     syncRuntimeFrontendState();
     renderTopics(topics);
-    setJson(topicsResponse.payload);
-    setStatus(`Topicos carregados via BCF ${topicsResponse.endpoint.version}. JSON bruto disponivel.`);
+    setJson({
+      projectId: project.id,
+      bcfEndpoint: topicsResponse.endpoint,
+      rawTopicsList: topicsResponse.payload,
+      rawTopicDetails: topicDetails,
+    });
+    setStatus(
+      `Topicos carregados via BCF ${topicsResponse.endpoint.version}. JSON bruto inclui detalhes por guid.`
+    );
   } catch (error) {
     if (requestId !== topicsLoadRequestId) {
       return;
