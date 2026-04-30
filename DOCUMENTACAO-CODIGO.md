@@ -117,9 +117,9 @@ Ao carregar topicos com sucesso, o painel JSON recebe um pacote de desenvolvimen
 - `projectId`: projeto consultado.
 - `bcfEndpoint`: endpoint de listagem que respondeu.
 - `rawTopicsList`: payload bruto de `/topics`.
-- `rawTopicDetails`: pacote bruto por topico contendo `/topics/{guid}` e `/comments`.
+- `rawTopicDetails`: pacote bruto por topico contendo `/topics/{guid}` e `/events`.
 
-Cada item de `rawTopicDetails` contem `index`, `guid`, `detailUrl`, `detail`, `error` e `resources`. Dentro de `resources`, cada chamada guarda `url`, `payload` e `error`. Por performance, `viewpoints` e `events` nao sao buscados no fluxo padrao. A normalizacao acontece em paralelo apenas para renderizacao da tabela e exportacao.
+Cada item de `rawTopicDetails` contem `index`, `guid`, `detailUrl`, `detail`, `error` e `resources`. Dentro de `resources`, cada chamada guarda `url`, `payload` e `error`. Por performance, `viewpoints` e `comments` nao sao buscados no fluxo padrao. A normalizacao acontece em paralelo apenas para renderizacao da tabela e exportacao.
 
 ## 8. Normalizacao de Topicos
 
