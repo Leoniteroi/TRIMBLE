@@ -13,4 +13,4 @@ jobs:
         host: ${{ secrets.HOST }} 
         user: ${{ secrets.USER }}
         password: ${{ secrets.PASS }}
-        localDir: "/home/sjtx1/public_html/trimble"
+        localDir: "public_html/trimble"
