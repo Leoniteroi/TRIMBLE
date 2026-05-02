@@ -15,4 +15,4 @@ jobs:
         server: ${{ secrets.HOST }}
         username: ${{ secrets.USER }}
         password: ${{ secrets.PASS }}
-        localDir: "/public_html/trimble"
+        server-dir: ./public_html/trimble/
